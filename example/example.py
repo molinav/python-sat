@@ -1,30 +1,29 @@
-#! /usr/bin/env/python
+from __future__ import print_function
+import os.path
+from six import text_type
+from sat.Orbit import Orbit
+from sat.Angle import Angle
 
-import tle
+expath = "example.tle"
 
+with open(expath, "r") as exfile:
 
-# Example 1.
-input_list = [
-    "METOP-B      \n",
-    "1 38771U 12049A   15060.09038281  .00000104  00000-0  67552-4 0  9999\n",
-    "2 38771  98.7116 121.5278 0001914 123.9555 292.2003 14.21473887127060\n",
-]
+    tle_list1 = [text_type(exfile.readline().strip("\n")) for i in range(3)]
+    
+    print()
+    for row in tle_list1:
+        print(row)
+    print()
+    
+    obj = Orbit.from_tle(*tle_list1)
 
-sat1 = tle.from_list(input_list)
+    for attr in obj._properties:
+        v = obj.__getattribute__(attr)
+        if isinstance(v, Angle):
+            v = v.deg
+        print("{:40s}".format(attr), "{}".format(v))
 
-print("\nTest with tle.from_list function")
-print("{}\n".format(sat1))
-
-for k, v in sorted(sat1.__dict__.items()):
-    print("{:40} {}".format(k[1:], v))
-
-# Example 2.
-path = "example.tle"
-with open(path, "r") as input_file:
-    sat2 = tuple(tle.from_file(input_file))[0]
-
-print("\nTest with tle.from_file function")
-print("{}\n".format(sat2))
-
-for k, v in sorted(sat2.__dict__.items()):
-    print("{:40} {}".format(k[1:], v))
+    tle_list2 = obj.to_tle()
+    
+    flag = (tle_list1 == tle_list2)
+    print("\nImported and exported TLE sets are equivalent: {}".format(flag))
