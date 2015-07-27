@@ -1,6 +1,8 @@
 # python-sat
-The library python-sat is a simple Python interface to extract orbit parameters
-from two-line element (TLE) sets. It is released under the GNU GPL v3.0.
+
+The library `python-sat` is a simple Python interface to extract orbit
+parameters from two-line element (TLE) sets. It is released under the GNU
+GPL v3.0.
 
 Prerequisites
 -------------
@@ -33,4 +35,5 @@ Reporting bugs
 --------------
 
 This library is currently in development and its state is still alpha. For
-reporting bugs, feel free to open an issue at http://github.com/python-sat/issues.
+reporting bugs, feel free to open an issue at
+http://github.com/molinav/python-sat/issues.
