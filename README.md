@@ -1,6 +1,6 @@
 # python-sat
 The library python-sat is a simple Python interface to extract orbit parameters
-from two-line element sets.
+from two-line element (TLE) sets. It is released under the GNU GPL v3.0.
 
 Prerequisites
 -------------
@@ -15,14 +15,19 @@ Installation
 Download the library as a compressed file and unzip it. Open a terminal in the
 directory where the uncompressed folder is located and type:
 
-'''
+```
 pip install ./python-sat
-''' 
+```
 
 To uninstall it, just type in a shell:
-'''
+
+```
 pip uninstall python-sat
-'''
+```
+
+Once the library is correctly installed, it is possible to check the example
+file `example.py`, which opens a TLE file and transcripts it into an Orbit
+instance.
 
 Reporting bugs
 --------------
