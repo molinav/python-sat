@@ -1,4 +1,4 @@
-"""Custom errors for tle.Orbit class."""
+"""Custom errors for sat.Orbit class."""
 
 class OrbitError(Exception):
 

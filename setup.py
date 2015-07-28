@@ -18,7 +18,8 @@ setup(
         "sat",
         "sat._constants",
         "sat._decorators",
-        "sat._errors"],
+        "sat._errors",
+        "sat.filepath"],
     license="GNU General Public License Version 3",
     long_description=open("README.md").read(),
     install_requires=[

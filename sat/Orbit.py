@@ -343,52 +343,6 @@ class Orbit(object):
         nums = re.findall("\d", line.replace("-", "1"))
         return sum(int(x) for x in nums) % 10 if nums else 0
 
-    def to_tle(self):
-        """Return a two-line element set as a list."""
-
-        if not self:
-            msg = "Orbit instance is not complete"
-            raise AttributeError(msg)
-
-        title = self.satellite_name.ljust(24)
-        line1 = text_type(
-            "1 {:5d}{:1s} {:5s}{:3s} {:5s}{:9s} {:1s}{:9s} {:8s} {:8s} 0 {:4d}".
-            format(self.satellite_number,
-                   self.satellite_classification,
-                   self.launch_date.strftime("%y%j"),
-                   self.launch_piece.ljust(3),
-                   self.epoch.strftime("%y%j"),
-                   "{:10.8f}".format(
-                       timedelta(0, self.epoch.second, self.epoch.microsecond,
-                                 0, self.epoch.minute, self.epoch.hour,
-                                 0).total_seconds()/86400)[1:],
-                   "-" if self.mean_motion_first_dif < 0 else " ",
-                   "{:10.8f}".format(abs(self.mean_motion_first_dif)/2)[1:],
-                   " 00000-0" if self.mean_motion_second_dif == 0 else
-                   "{: =05d}{:+d}".
-                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
-                            ["{:.5e}".format(
-                             self.mean_motion_second_dif/6).split("e")]][0]),
-                   " 00000-0" if self.drag == 0 else
-                   "{: 05d}{:+d}".
-                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
-                            ["{:.5e}".format(
-                             self.drag).split("e")]][0]),
-                   self.element_set_number))
-        line2 = text_type(
-            "2 {:5d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5d}".
-            format(self.satellite_number,
-                   self.inclination.deg,
-                   self.right_ascension_of_the_ascending_node.deg,
-                   "{:9.7f}".format(self.eccentricity)[2:],
-                   self.argument_of_perigee.deg,
-                   self.mean_anomaly.deg,
-                   self.mean_motion,
-                   self.epoch_revolution_number))
-        line1 = "".join([line1, text_type(self._calc_checksum(line1))])
-        line2 = "".join([line2, text_type(self._calc_checksum(line2))])
-        return [title, line1, line2]
-
     @staticmethod
     @accepts(text_type, text_type, text_type, static=True)
     def from_tle(title, line1, line2):
@@ -516,3 +470,49 @@ class Orbit(object):
         except OrbitError as err:
             err.__cause__ = None
             print(err)
+
+    def to_tle(self):
+        """Return a two-line element set as a list."""
+
+        if not self:
+            msg = "Orbit instance is not complete"
+            raise AttributeError(msg)
+
+        title = self.satellite_name.ljust(24)
+        line1 = text_type(
+            "1 {:5d}{:1s} {:5s}{:3s} {:5s}{:9s} {:1s}{:9s} {:8s} {:8s} 0 {:4d}".
+            format(self.satellite_number,
+                   self.satellite_classification,
+                   self.launch_date.strftime("%y%j"),
+                   self.launch_piece.ljust(3),
+                   self.epoch.strftime("%y%j"),
+                   "{:10.8f}".format(
+                       timedelta(0, self.epoch.second, self.epoch.microsecond,
+                                 0, self.epoch.minute, self.epoch.hour,
+                                 0).total_seconds()/86400)[1:],
+                   "-" if self.mean_motion_first_dif < 0 else " ",
+                   "{:10.8f}".format(abs(self.mean_motion_first_dif)/2)[1:],
+                   " 00000-0" if self.mean_motion_second_dif == 0 else
+                   "{: =05d}{:+d}".
+                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
+                            ["{:.5e}".format(
+                             self.mean_motion_second_dif/6).split("e")]][0]),
+                   " 00000-0" if self.drag == 0 else
+                   "{: 05d}{:+d}".
+                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
+                            ["{:.5e}".format(
+                             self.drag).split("e")]][0]),
+                   self.element_set_number))
+        line2 = text_type(
+            "2 {:5d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5d}".
+            format(self.satellite_number,
+                   self.inclination.deg,
+                   self.right_ascension_of_the_ascending_node.deg,
+                   "{:9.7f}".format(self.eccentricity)[2:],
+                   self.argument_of_perigee.deg,
+                   self.mean_anomaly.deg,
+                   self.mean_motion,
+                   self.epoch_revolution_number))
+        line1 = "".join([line1, text_type(self._calc_checksum(line1))])
+        line2 = "".join([line2, text_type(self._calc_checksum(line2))])
+        return [title, line1, line2]

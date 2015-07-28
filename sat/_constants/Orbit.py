@@ -1,4 +1,4 @@
-"""Necessary constants for tle.Orbit class."""
+"""Necessary constants for sat.Orbit class."""
 
 from six import text_type
 
@@ -43,4 +43,4 @@ PATTERN_LINE2 = text_type(
            chk="(\d)",
            end="(( \d|\d{2})\.\d{8})(    \d|   \d{2}|  \d{3}| \d{4}|\d{5})",
            i5="(\d{5})",
-           i7="(\d{7})"))
+           i7="(\d{7})",))

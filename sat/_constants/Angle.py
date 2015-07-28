@@ -1,4 +1,4 @@
-"""Necessary constants for tle.Angle class."""
+"""Necessary constants for sat.Angle class."""
 
 from math import pi
 
