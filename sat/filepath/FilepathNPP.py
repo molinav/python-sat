@@ -30,7 +30,15 @@ class FilepathNPP(Filepath):
         ]
 
     def __init__(self, *args):
-        """Constructor of a generic FilepathNPP instance."""
+        """Constructor of a generic FilepathNPP instance.
+
+        Parameters:
+
+        args
+            if args length is 0, an empty instance is created, if it
+            is 1 an instance from string path is created, otherwise
+            an error is raised
+        """
 
         # Stop if no argument is provided.
         if len(args) is 0:
@@ -89,7 +97,14 @@ class FilepathNPP(Filepath):
 
     @accepts(text_type)
     def from_path(self, path):
-        """Fill FilepathNPP properties using an appropriate string path."""
+        """Fill FilepathNPP properties using an appropriate string path.
+
+
+        Parameters:
+
+        path
+            filepath as a string variable.
+        """
 
         # Create a temporary FilepathNPP instance.
         obj = FilepathNPP()

@@ -1,20 +1,20 @@
 from __future__ import division
-from . _constants.Orbit import LIMITS_ECCENTRICITY
-from . _constants.Orbit import LIMITS_ELEMENT_SET_NUMBER
-from . _constants.Orbit import LIMITS_EPOCH_REVOLUTION_NUMBER
-from . _constants.Orbit import LIMITS_MEAN_MOTION_FIRST_DIF
-from . _constants.Orbit import LIMITS_SATELLITE_NUMBER
-from . _constants.Orbit import PATTERN_LAUNCH_PIECE
-from . _constants.Orbit import PATTERN_SATELLITE_CLASSIFICATION
-from . _constants.Orbit import PATTERN_SATELLITE_NAME
-from . _constants.Orbit import PATTERN_TITLE
-from . _constants.Orbit import PATTERN_LINE1
-from . _constants.Orbit import PATTERN_LINE2
+from . _constants.Ephemeris import LIMITS_ECCENTRICITY
+from . _constants.Ephemeris import LIMITS_ELEMENT_SET_NUMBER
+from . _constants.Ephemeris import LIMITS_EPOCH_REVOLUTION_NUMBER
+from . _constants.Ephemeris import LIMITS_MEAN_MOTION_FIRST_DIF
+from . _constants.Ephemeris import LIMITS_SATELLITE_NUMBER
+from . _constants.Ephemeris import PATTERN_LAUNCH_PIECE
+from . _constants.Ephemeris import PATTERN_SATELLITE_CLASSIFICATION
+from . _constants.Ephemeris import PATTERN_SATELLITE_NAME
+from . _constants.Ephemeris import PATTERN_TITLE
+from . _constants.Ephemeris import PATTERN_LINE1
+from . _constants.Ephemeris import PATTERN_LINE2
 from . _decorators import accepts
 from . _decorators import limits
 from . _decorators import pattern
 from . _decorators import returns
-from . _errors.Orbit import OrbitError
+from . _errors.Ephemeris import EphemerisError
 from . Angle import AziAngle
 from . Angle import ZenAngle
 from datetime import datetime
@@ -24,14 +24,14 @@ from six import text_type
 import re
 
 
-class Orbit(object):
+class Ephemeris(object):
 
     _properties = [
         "argument_of_perigee",
         "drag",
         "eccentricity",
         "element_set_number",
-        "epoch",
+        "epoch_datetime",
         "epoch_revolution_number",
         "inclination",
         "launch_date",
@@ -47,7 +47,7 @@ class Orbit(object):
         ]
 
     def __init__(self):
-        """Constructor of a generic Orbit instance."""
+        """Constructor of a generic Ephemeris instance."""
 
         for item in self._properties:
             self.__setattr__("_{}".format(item), None)
@@ -129,24 +129,24 @@ class Orbit(object):
 
     @property
     @returns(datetime)
-    def epoch(self):
-        """datetime for the current epoch time"""
-        return self._epoch
+    def epoch_datetime(self):
+        """datetime for the current epoch"""
+        return self._epoch_datetime
 
-    @epoch.setter
+    @epoch_datetime.setter
     @accepts(datetime)
-    def epoch(self, val):
-        self._epoch = val
+    def epoch_datetime(self, val):
+        self._epoch_datetime = val
 
-    @epoch.deleter
-    def epoch(self):
-        self._epoch = None
+    @epoch_datetime.deleter
+    def epoch_datetime(self):
+        self._epoch_datetime = None
 
     @property
     @returns(int)
     @limits(*LIMITS_EPOCH_REVOLUTION_NUMBER, getter=True)
     def epoch_revolution_number(self):
-        """revolution number corresponding to the epoch time"""
+        """revolution number corresponding to the epoch"""
         return self._epoch_revolution_number
 
     @epoch_revolution_number.setter
@@ -346,7 +346,7 @@ class Orbit(object):
     @staticmethod
     @accepts(text_type, text_type, text_type, static=True)
     def from_tle(title, line1, line2):
-        """Return an Orbit instance from a two-line element set.
+        """Return an Ephemeris instance from a two-line element set.
 
         Parameters:
 
@@ -361,7 +361,7 @@ class Orbit(object):
         try:
 
             # Remove \n characters from string lines.
-            obj = Orbit()
+            obj = Ephemeris()
             lst = [x.replace("\n", "") for x in (title, line1, line2)]
 
             # Verify title, line1 and line2 with regular expressions.
@@ -370,13 +370,13 @@ class Orbit(object):
             match2 = re.match(PATTERN_LINE2, lst[2])
             if not match0:
                 msg = "invalid structure for TLE title"
-                raise OrbitError(msg)
+                raise EphemerisError(msg)
             if not match1:
                 msg = "invalid structure for TLE line 1"
-                raise OrbitError(msg)
+                raise EphemerisError(msg)
             if not match2:
                 msg = "invalid structure for TLE line 2"
-                raise OrbitError(msg)
+                raise EphemerisError(msg)
 
             # Start transcription of title.
             tmp0 = match0.group(0).strip()
@@ -387,14 +387,14 @@ class Orbit(object):
             chk2 = [obj._calc_checksum(row[:-1]) for row in lst[1:]]
             if chk1 != chk2:
                 msg = "checksum error, found {}, expected {}".format(chk1, chk2)
-                raise OrbitError(msg)
+                raise EphemerisError(msg)
 
             # Verify and transcript satellite number.
             tmp1 = int(match1.group(2))
             tmp2 = int(match2.group(2))
             if tmp1 != tmp2:
                 msg = "satellite number within the lines does not match"
-                raise OrbitError(msg)
+                raise EphemerisError(msg)
             obj.satellite_number = tmp1
 
             # Start transcription of line1.
@@ -415,7 +415,7 @@ class Orbit(object):
             day1 = tmp1[:5]
             day2 = tmp1[5:]
             tmp1 = datetime.strptime(day1, "%y%j") + timedelta(days=float(day2))
-            obj.epoch = tmp1
+            obj.epoch_datetime = tmp1
 
             # Transcript first derivative of mean motion.
             tmp1 = 2 * float(match1.group(8))
@@ -464,10 +464,10 @@ class Orbit(object):
             tmp2 = int(match2.group(14))
             obj._epoch_revolution_number = tmp2
 
-            # Return the Orbit instance.
+            # Return the Ephemeris instance.
             return obj
 
-        except OrbitError as err:
+        except EphemerisError as err:
             err.__cause__ = None
             print(err)
 
@@ -475,7 +475,7 @@ class Orbit(object):
         """Return a two-line element set as a list."""
 
         if not self:
-            msg = "Orbit instance is not complete"
+            msg = "Ephemeris instance is not complete"
             raise AttributeError(msg)
 
         title = self.satellite_name.ljust(24)
@@ -485,11 +485,16 @@ class Orbit(object):
                    self.satellite_classification,
                    self.launch_date.strftime("%y%j"),
                    self.launch_piece.ljust(3),
-                   self.epoch.strftime("%y%j"),
+                   self.epoch_datetime.strftime("%y%j"),
                    "{:10.8f}".format(
-                       timedelta(0, self.epoch.second, self.epoch.microsecond,
-                                 0, self.epoch.minute, self.epoch.hour,
-                                 0).total_seconds()/86400)[1:],
+                       timedelta(0,
+                                 self.epoch_datetime.second,
+                                 self.epoch_datetime.microsecond,
+                                 0,
+                                 self.epoch_datetime.minute,
+                                 self.epoch_datetime.hour,
+                                 0,
+                                 ).total_seconds()/86400)[1:],
                    "-" if self.mean_motion_first_dif < 0 else " ",
                    "{:10.8f}".format(abs(self.mean_motion_first_dif)/2)[1:],
                    " 00000-0" if self.mean_motion_second_dif == 0 else
@@ -498,7 +503,7 @@ class Orbit(object):
                             ["{:.5e}".format(
                              self.mean_motion_second_dif/6).split("e")]][0]),
                    " 00000-0" if self.drag == 0 else
-                   "{: 05d}{:+d}".
+                   "{: =05d}{:+d}".
                    format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
                             ["{:.5e}".format(
                              self.drag).split("e")]][0]),

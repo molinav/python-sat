@@ -1,7 +1,6 @@
 from __future__ import print_function
-import os.path
 from six import text_type
-from sat.Orbit import Orbit
+from sat.Ephemeris import Ephemeris
 from sat.Angle import Angle
 
 expath = "example.tle"
@@ -15,7 +14,7 @@ with open(expath, "r") as exfile:
         print(row)
     print()
     
-    obj = Orbit.from_tle(*tle_list1)
+    obj = Ephemeris.from_tle(*tle_list1)
 
     for attr in obj._properties:
         v = obj.__getattribute__(attr)

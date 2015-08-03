@@ -1,9 +1,9 @@
-"""Necessary constants for sat.Orbit class."""
+"""Necessary constants for sat.Ephemeris class."""
 
 from six import text_type
 
 
-# Limit values for Orbit properties.
+# Limit values for Ephemeris properties.
 LIMITS_ECCENTRICITY =\
     ["[", 0.0, 1.0, "]"]
 LIMITS_ELEMENT_SET_NUMBER =\
@@ -15,7 +15,7 @@ LIMITS_MEAN_MOTION_FIRST_DIF =\
 LIMITS_SATELLITE_NUMBER =\
     ["[", 0, 99999, "]"]
 
-# Patterns used within the class Orbit.
+# Patterns used within the class Ephemeris.
 PATTERN_LAUNCH_PIECE =\
     text_type("^([A-Z]{1,3})$")
 PATTERN_SATELLITE_CLASSIFICATION =\
