@@ -28,7 +28,7 @@ pip uninstall python-sat
 ```
 
 Once the library is correctly installed, it is possible to check the example
-file `example.py`, which opens a TLE file and transcripts it into an Orbit
+file `example.py`, which opens a TLE file and transcripts it into an Ephemeris
 instance.
 
 Reporting bugs
