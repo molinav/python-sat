@@ -498,12 +498,12 @@ class Ephemeris(object):
                    "-" if self.mean_motion_first_dif < 0 else " ",
                    "{:10.8f}".format(abs(self.mean_motion_first_dif)/2)[1:],
                    " 00000-0" if self.mean_motion_second_dif == 0 else
-                   "{: =05d}{:+d}".
+                   "{: =06d}{:+d}".
                    format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
                             ["{:.5e}".format(
                              self.mean_motion_second_dif/6).split("e")]][0]),
                    " 00000-0" if self.drag == 0 else
-                   "{: =05d}{:+d}".
+                   "{: =06d}{:+d}".
                    format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
                             ["{:.5e}".format(
                              self.drag).split("e")]][0]),

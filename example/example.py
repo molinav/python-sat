@@ -23,6 +23,6 @@ with open(expath, "r") as exfile:
         print("{:40s}".format(attr), "{}".format(v))
 
     tle_list2 = obj.to_tle()
-    
+
     flag = (tle_list1 == tle_list2)
     print("\nImported and exported TLE sets are equivalent: {}".format(flag))
