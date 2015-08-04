@@ -115,30 +115,30 @@ class FilepathNPP(Filepath):
             msg = "path string does not have a correct structure"
             raise AttributeError(msg)
         # Set dataset product name.
-        obj.product = match0.group(2)
+        obj.product = match0.group(1)
         # Set satellite name.
-        obj.satellite_name = match0.group(3)
+        obj.satellite_name = match0.group(2)
         # Set start and end datetimes.
-        sdate = match0.group(4)
+        sdate = match0.group(3)
         stime = datetime.strptime(
-            "".join([sdate, match0.group(8), "00000"]), "%Y%m%d%H%M%S%f")
+            "".join([sdate, match0.group(4), "00000"]), "%Y%m%d%H%M%S%f")
         etime = datetime.strptime(
-            "".join([sdate, match0.group(12), "00000"]), "%Y%m%d%H%M%S%f")
+            "".join([sdate, match0.group(5), "00000"]), "%Y%m%d%H%M%S%f")
         if etime < stime:
             etime += timedelta(days=1)
         obj.start_datetime = stime
         obj.end_datetime = etime
         # Set orbit number.
-        obj.orbit_number = int(match0.group(16))
+        obj.orbit_number = int(match0.group(6))
         # Set processing datetime.
-        pdate = match0.group(17)
+        pdate = match0.group(7)
         ptime = datetime.strptime(
-            "".join([pdate, match0.group(21)]), "%Y%m%d%H%M%S%f")
+            "".join([pdate, match0.group(8)]), "%Y%m%d%H%M%S%f")
         obj.processing_datetime = ptime
         # Set provider name.
-        obj.provider = match0.group(25)
+        obj.provider = match0.group(9)
         # Set dataset status.
-        obj.status = match0.group(26)
+        obj.status = match0.group(10)
         # Copy attributes from temporary FilepathNPP instance into self.
         for item in obj._properties:
             item_name = "_{}".format(item)

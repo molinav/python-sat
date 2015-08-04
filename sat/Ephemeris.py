@@ -368,6 +368,7 @@ class Ephemeris(object):
             match0 = re.match(PATTERN_TITLE, lst[0])
             match1 = re.match(PATTERN_LINE1, lst[1])
             match2 = re.match(PATTERN_LINE2, lst[2])
+
             if not match0:
                 msg = "invalid structure for TLE title"
                 raise EphemerisError(msg)
@@ -383,15 +384,15 @@ class Ephemeris(object):
             obj.satellite_name = tmp0
 
             # Verify checksums.
-            chk1 = [int(match1.group(12)), int(match2.group(15))]
+            chk1 = [int(match1.group(11)), int(match2.group(9))]
             chk2 = [obj._calc_checksum(row[:-1]) for row in lst[1:]]
             if chk1 != chk2:
                 msg = "checksum error, found {}, expected {}".format(chk1, chk2)
                 raise EphemerisError(msg)
 
             # Verify and transcript satellite number.
-            tmp1 = int(match1.group(2))
-            tmp2 = int(match2.group(2))
+            tmp1 = int(match1.group(1))
+            tmp2 = int(match2.group(1))
             if tmp1 != tmp2:
                 msg = "satellite number within the lines does not match"
                 raise EphemerisError(msg)
@@ -399,69 +400,68 @@ class Ephemeris(object):
 
             # Start transcription of line1.
             # Transcript satellite classification.
-            tmp1 = match1.group(3)
+            tmp1 = match1.group(2)
             obj.satellite_classification = tmp1
 
             # Transcript launch date.
-            tmp1 = datetime.strptime(match1.group(4), "%y%j").date()
+            tmp1 = datetime.strptime(match1.group(3), "%y%j").date()
             obj.launch_date = tmp1
 
             # Transcript launch piece.
-            tmp1 = match1.group(5).strip()
+            tmp1 = match1.group(4).strip()
             obj.launch_piece = tmp1
 
             # Transcript epoch datetime.
-            tmp1 = match1.group(6)
-            day1 = tmp1[:5]
-            day2 = tmp1[5:]
+            day1 = match1.group(5)
+            day2 = match1.group(6)
             tmp1 = datetime.strptime(day1, "%y%j") + timedelta(days=float(day2))
             obj.epoch_datetime = tmp1
 
             # Transcript first derivative of mean motion.
-            tmp1 = 2 * float(match1.group(8))
+            tmp1 = 2 * float(match1.group(7))
             obj.mean_motion_first_dif = tmp1
 
             # Transcript second derivative of mean motion.
-            tmp1 = match1.group(9)
+            tmp1 = match1.group(8)
             tmp1 = 6 * float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
             obj.mean_motion_second_dif = tmp1
 
             # Transcript drag term.
-            tmp1 = match1.group(10)
+            tmp1 = match1.group(9)
             tmp1 = float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
             obj.drag = tmp1
 
             # Transcript element set number.
-            tmp1 = int(match1.group(11))
+            tmp1 = int(match1.group(10))
             obj.element_set_number = tmp1
 
             # Start transcription of line2.
             # Transcript inclination.
-            tmp2 = ZenAngle(deg=float(match2.group(3)))
+            tmp2 = ZenAngle(deg=float(match2.group(2)))
             obj.inclination = tmp2
 
             # Transcript right ascension of the ascending node.
-            tmp2 = AziAngle(deg=float(match2.group(5)))
+            tmp2 = AziAngle(deg=float(match2.group(3)))
             obj.right_ascension_of_the_ascending_node = tmp2
 
             # Transcript eccentricity.
-            tmp2 = float(".{}".format(match2.group(7)))
+            tmp2 = float(".{}".format(match2.group(4)))
             obj.eccentricity = tmp2
 
             # Transcript argument of perigee.
-            tmp2 = AziAngle(deg=float(match2.group(8)))
+            tmp2 = AziAngle(deg=float(match2.group(5)))
             obj.argument_of_perigee = tmp2
 
             # Transcript mean anomaly.
-            tmp2 = AziAngle(deg=float(match2.group(10)))
+            tmp2 = AziAngle(deg=float(match2.group(6)))
             obj.mean_anomaly = tmp2
 
             # Transcript mean motion.
-            tmp2 = float(match2.group(12))
+            tmp2 = float(match2.group(7))
             obj.mean_motion = tmp2
 
             # Transcript revolution number at epoch.
-            tmp2 = int(match2.group(14))
+            tmp2 = int(match2.group(8))
             obj._epoch_revolution_number = tmp2
 
             # Return the Ephemeris instance.
