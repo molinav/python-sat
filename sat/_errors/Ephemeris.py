@@ -1,5 +1,6 @@
 """Custom errors for sat.Ephemeris class."""
 
+
 class EphemerisError(Exception):
 
     def __init__(self, message):

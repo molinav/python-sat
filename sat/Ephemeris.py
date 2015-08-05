@@ -40,7 +40,7 @@ class Ephemeris(object):
         "mean_motion",
         "mean_motion_first_dif",
         "mean_motion_second_dif",
-        "right_ascension_of_the_ascending_node",
+        "longitude_of_the_ascending_node",
         "satellite_classification",
         "satellite_name",
         "satellite_number",
@@ -65,7 +65,7 @@ class Ephemeris(object):
     @property
     @returns(AziAngle)
     def argument_of_perigee(self):
-        """argument of perigee stored as a ZenAngle instance"""
+        """argument of perigee stored as an AziAngle instance"""
         return self._argument_of_perigee
 
     @argument_of_perigee.setter
@@ -113,8 +113,8 @@ class Ephemeris(object):
     @returns(int)
     @limits(*LIMITS_ELEMENT_SET_NUMBER, getter=True)
     def element_set_number(self):
-        """element set number, incremented when a new two-line element set
-        is generated for the satellite"""
+        """element set number, incremented when a new two-line element
+        set is generated for the satellite"""
         return self._element_set_number
 
     @element_set_number.setter
@@ -208,8 +208,23 @@ class Ephemeris(object):
 
     @property
     @returns(AziAngle)
+    def longitude_of_the_ascending_node(self):
+        """longitude of the ascending node stored as an AziAngle instance"""
+        return self._longitude_of_the_ascending_node
+
+    @longitude_of_the_ascending_node.setter
+    @accepts(AziAngle)
+    def longitude_of_the_ascending_node(self, val):
+        self._longitude_of_the_ascending_node = val
+
+    @longitude_of_the_ascending_node.deleter
+    def longitude_of_the_ascending_node(self):
+        self._longitude_of_the_ascending_node = None
+
+    @property
+    @returns(AziAngle)
     def mean_anomaly(self):
-        """mean anomaly of the Kepler orbit stored as a ZenAngle instance"""
+        """mean anomaly of the orbit stored as an AziAngle instance"""
         return self._mean_anomaly
 
     @mean_anomaly.setter
@@ -268,22 +283,6 @@ class Ephemeris(object):
     @mean_motion_second_dif.deleter
     def mean_motion_second_dif(self):
         self._mean_motion_second_dif = None
-
-    @property
-    @returns(AziAngle)
-    def right_ascension_of_the_ascending_node(self):
-        """right ascension of the ascending node stored as a ZenAngle
-        instance"""
-        return self._right_ascension_of_the_ascending_node
-
-    @right_ascension_of_the_ascending_node.setter
-    @accepts(AziAngle)
-    def right_ascension_of_the_ascending_node(self, val):
-        self._right_ascension_of_the_ascending_node = val
-
-    @right_ascension_of_the_ascending_node.deleter
-    def right_ascension_of_the_ascending_node(self):
-        self._right_ascension_of_the_ascending_node = None
 
     @property
     @returns(text_type)
@@ -440,9 +439,9 @@ class Ephemeris(object):
             tmp2 = ZenAngle(deg=float(match2.group(2)))
             obj.inclination = tmp2
 
-            # Transcript right ascension of the ascending node.
+            # Transcript longitude of the ascending node.
             tmp2 = AziAngle(deg=float(match2.group(3)))
-            obj.right_ascension_of_the_ascending_node = tmp2
+            obj.longitude_of_the_ascending_node = tmp2
 
             # Transcript eccentricity.
             tmp2 = float(".{}".format(match2.group(4)))
@@ -470,6 +469,15 @@ class Ephemeris(object):
         except EphemerisError as err:
             err.__cause__ = None
             print(err)
+
+    def to_copy(self):
+        """Return a deep copy of the Ephemeris instance."""
+
+        obj = Ephemeris()
+        for item in self._properties:
+            attr = "_{}".format(item)
+            obj.__setattr__(attr, self.__getattribute__(attr))
+        return obj
 
     def to_tle(self):
         """Return a two-line element set as a list."""
@@ -512,7 +520,7 @@ class Ephemeris(object):
             "2 {:5d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5d}".
             format(self.satellite_number,
                    self.inclination.deg,
-                   self.right_ascension_of_the_ascending_node.deg,
+                   self.longitude_of_the_ascending_node.deg,
                    "{:9.7f}".format(self.eccentricity)[2:],
                    self.argument_of_perigee.deg,
                    self.mean_anomaly.deg,
