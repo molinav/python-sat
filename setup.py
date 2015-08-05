@@ -23,5 +23,6 @@ setup(
     license="GNU General Public License Version 3",
     long_description=open("README.md").read(),
     install_requires=[
-        "six"],
+        "six",
+        "numpy"],
     )
