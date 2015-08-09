@@ -25,8 +25,9 @@ class Orbit(object):
         "longitude_of_the_ascending_node",
         "mean_anomaly",
         "mean_motion",
-        "satellite_position_ecef",
-        "satellite_position_geod",
+        "satellite_position_ecf",
+        "satellite_position_eci",
+        "satellite_position_geo",
         "semimajor_axis",
         "timedelta",
         "true_anomaly",
@@ -87,15 +88,21 @@ class Orbit(object):
 
     @property
     @returns(np.ndarray)
-    def satellite_position_ecef(self):
+    def satellite_position_ecf(self):
         """satellite position in ECEF reference system"""
-        return self._satellite_position_ecef
+        return self._satellite_position_ecf
 
     @property
     @returns(np.ndarray)
-    def satellite_position_geod(self):
+    def satellite_position_eci(self):
+        """satellite position in ECI reference system"""
+        return self._satellite_position_eci
+
+    @property
+    @returns(np.ndarray)
+    def satellite_position_geo(self):
         """satellite position in geodetic reference system"""
-        return self._satellite_position_geod
+        return self._satellite_position_geo
 
     @property
     @returns(np.ndarray)
@@ -126,6 +133,7 @@ class Orbit(object):
         """
 
         def _add_datetime(self, datetime):
+            """Safe setter for datetime attribute."""
             try:
                 self._datetime = np.asarray([
                     x.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -138,9 +146,11 @@ class Orbit(object):
                 exit()
 
         def _calc_timedelta(self):
+            """Compute time difference with respect to epoch."""
             try:
+                fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
                 epoch = np.asarray([
-                    self.ephemeris.epoch_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    self.ephemeris.epoch_datetime.strftime(fmt)
                     ]).astype("datetime64")
                 delta = (self.datetime - epoch)[:, np.newaxis]
                 self._timedelta = (delta / np.timedelta64(1, "D")).astype(float)
@@ -151,116 +161,145 @@ class Orbit(object):
                 exit()
 
         def _calc_mean_motion(self):
+            """Compute mean motion for a specific time."""
 
+            # Call necessary properties.
             dt = self.timedelta
             n0 = self.ephemeris.mean_motion
             n1 = self.ephemeris.mean_motion_first_dif
             n2 = self.ephemeris.mean_motion_second_dif
-
-            self._mean_motion = np.asarray(n0 + n1 * dt + 0.5 * n2 * dt**2)
+            # Set mean motion property.
+            self._mean_motion = n0 + n1 * dt + 0.5 * n2 * dt**2
 
         def _calc_mean_anomaly(self):
+            """Compute mean anomaly for a specific time."""
 
+            # Call necessary properties.
             dt = self.timedelta
             m0 = self.ephemeris.mean_anomaly.rad
             n = self.mean_motion * REV2RAD
-            self._mean_anomaly = np.asarray(m0 + n * dt)
+            # Set mean anomaly property.
+            self._mean_anomaly = m0 + n * dt
 
         def _calc_eccentric_anomaly(self):
+            """Compute eccentric anomaly for a specific time."""
 
+            # Call necessary properties.
             eccent = self.ephemeris.eccentricity
             m = self.mean_anomaly
             ean_old = m
             dif = np.asarray([1])
-
+            # Solve Kepler's equation by recursive methods until a tolerance
+            # is reached.
             while (dif > 0).all():
                 ean_new = np.where(dif > 0, m + eccent*np.sin(ean_old), ean_old)
                 dif = np.abs(ean_new - ean_old) - ECCENTRIC_ANOMALY_TOLERANCE
                 ean_old = ean_new
-
+            # Set eccentric anomaly property.
             self._eccentric_anomaly = ean_old
 
         def _calc_true_anomaly(self):
+            """Compute true anomaly for a specific time."""
 
+            # Call necessary properties.
             eccent = self.ephemeris.eccentricity
             factor = np.sqrt((1+eccent)/(1-eccent))
             ean = self.eccentric_anomaly
-
+            # Set true anomaly property.
             self._true_anomaly = 2 * np.arctan(factor * np.tan(ean/2))
 
         def _calc_semimajor_axis(self):
+            """Compute semimajor axis for a specific time."""
 
+            # Call necessary constants and properties.
             mu = STANDARD_GRAVITATIONAL_PARAMETER
             n = self.mean_motion * REV2RAD / DAY2SEC
-
+            # Set semimajor axis property using Kepler's third law.
             self._semimajor_axis = (mu / n**2)**(1/3)
 
         def _calc_argument_of_perigee_and_longitude_of_the_ascending_node(self):
+            """Compute argument of perigee and longitude of the ascending
+            node for a specific time."""
 
+            # Call necessary constants.
             j2 = SECOND_ZONAL_TERM_J2
             mu = STANDARD_GRAVITATIONAL_PARAMETER
-
+            # Call necessary properties.
             dt = self.timedelta
             i = self.ephemeris.inclination.rad
             n = self.mean_motion
-
             eccent = self.ephemeris.eccentricity
             a = self.semimajor_axis
             p = a * (1-eccent**2)
-
+            # Compute first derivatives of argument of perigee and longitude
+            # of the ascending node.
             factor = -REV2RAD * j2 / (mu*p**2) * 3 * n
             w0 = self.ephemeris.argument_of_perigee.rad
             w1 = factor * ((5/4)*np.sin(i)**2 - 1)
-            omega0 = self.ephemeris.longitude_of_the_ascending_node.rad
-            omega1 = (factor/2) * np.cos(i)
+            o0 = self.ephemeris.longitude_of_the_ascending_node.rad
+            o1 = (factor/2) * np.cos(i)
+            # Set argument of perigee property.
+            self._argument_of_perigee = w0 + w1 * dt
+            # Set longitude of the ascending node property.
+            self._longitude_of_the_ascending_node = o0 + o1 * dt
 
-            self._argument_of_perigee = np.asarray(w0 + w1 * dt)
-            self._longitude_of_the_ascending_node = np.asarray(omega0 + omega1 * dt)
+        def _calc_eci_coordinates(self):
+            """Compute ECI cartesian coordinates for a specific time."""
 
-        def _calc_cartesian_coordinates(self):
-
-            we = EARTH_ANGULAR_SPEED
-
+            # Call necessary properties.
             i = self.ephemeris.inclination.rad
             o = self.longitude_of_the_ascending_node
             w = self.argument_of_perigee
             v = self.true_anomaly
-
             eccent = self.ephemeris.eccentricity
             a = self.semimajor_axis
+            # Compute intermediate factors.
             p = a * (1 - eccent**2)
+            r = p / (1 + eccent * np.cos(v))
+            # Compute (X,Y,Z) coordinates in ECI reference system.
+            rx = r * (np.cos(o)*np.cos(w+v) - np.sin(o)*np.sin(w+v)*np.cos(i))
+            ry = r * (np.sin(o)*np.cos(w+v) + np.cos(o)*np.sin(w+v)*np.cos(i))
+            rz = r * (np.sin(w+v)*np.sin(i))
+            # Set ECI satellite position property.
+            self._satellite_position_eci = np.asarray([rx, ry, rz]).T
 
-            r_s = p / (1 + eccent * np.cos(v))
+        def _calc_ecf_coordinates(self):
+            """Compute ECEF cartesian coordinates for a specific time."""
 
-            rx_s1 = r_s * (np.cos(o)*np.cos(w+v) - np.sin(o)*np.sin(w+v)*np.cos(i))
-            ry_s1 = r_s * (np.sin(o)*np.cos(w+v) + np.cos(o)*np.sin(w+v)*np.cos(i))
-            rz_s1 = r_s * (np.sin(w+v)*np.sin(i))
-
-            ref1 = np.datetime64("2000-01-01T12:00:00Z")
-            ref2 = np.datetime64("2000-01-01T00:00:00Z")
-            dtm1 = ((self.datetime - ref1) / np.timedelta64(1, "D")).astype(float)[:, np.newaxis] / 36525
-            dtm2 = ((self.datetime - ref2) / np.timedelta64(1, "D")).astype(float)[:, np.newaxis]
+            # Call necessary constants.
+            we = EARTH_ANGULAR_SPEED
+            t1 = np.datetime64("2000-01-01T12:00:00Z")
+            t2 = np.datetime64("2000-01-01T00:00:00Z")
+            # Call necessary properties.
+            rx, ry, rz = self.satellite_position_eci.T
+            # Compute Julian centuries since epoch 2000/01/01 12:00:00.
+            dtm1 = ((self.datetime - t1) / np.timedelta64(1, "D")).astype(float)
+            dtm1 = dtm1[:, np.newaxis] / 36525
+            # Compute UTC time for the datetime of interest.
+            dtm2 = ((self.datetime - t2) / np.timedelta64(1, "D")).astype(float)
+            dtm2 = dtm2[:, np.newaxis]
             dtm2 = ((dtm2 % dtm2.astype(int)) * 86400)
-
-
-            gst0 = 24110.54841 + 8640184.812866 * dtm1 + 0.093104 * dtm1**2 - 6.2e-6 * dtm1**3
+            # Compute the Greenwich Sidereal Time (GST), that is, the angle
+            # between the vernal point and the Greenwich meridian (which is
+            # also the angle between the ECI and ECEF reference systems).
+            c0, c1, c2, c3 = [24110.54841, 8640184.812866, 0.093104, -6.2e-6]
+            gst0 = c0 + c1 * dtm1 + c2 * dtm1**2 + c3 * dtm1**3
             gst2 = (gst0/86400 * 2*np.pi) + we * dtm2
+            # Compute ECEF coordinates as a rotation of ECI coordinates.
+            rx_s = + np.cos(gst2)*rx + np.sin(gst2)*ry
+            ry_s = - np.sin(gst2)*rx + np.cos(gst2)*ry
+            rz_s = rz
+            # Set ECEF satellite position property.
+            self._satellite_position_ecf = np.hstack([rx_s, ry_s, rz_s])
 
-            rx_s = + np.cos(gst2)*rx_s1 + np.sin(gst2)*ry_s1
-            ry_s = - np.sin(gst2)*rx_s1 + np.cos(gst2)*ry_s1
-            rz_s = rz_s1
+        def _calc_geo_coordinates(self):
+            """Compute geodetic coordinates for a specific time."""
 
-            #rx_s = rx_s1
-            #ry_s = ry_s1
-
-            self._satellite_position_ecef = np.asarray([rx_s, ry_s, rz_s]).T
-
-        def _calc_geodetic_coordinates(self):
-
+            # Call necessary constants.
             ae = EARTH_SEMIMAJOR_AXIS
             e2 = EARTH_FLATTENING_FACTOR
-
-            rx_s, ry_s, rz_s = self._satellite_position_ecef.T
+            # Call necessary properties.
+            rx_s, ry_s, rz_s = self.satellite_position_ecf.T
             p_factor = np.sqrt(rx_s**2 + ry_s**2)
 
             def _estimate_n_factor(latitude):
@@ -276,13 +315,13 @@ class Orbit(object):
             def _estimate_longitude():
                 return np.arctan2(ry_s, rx_s)
 
+            # Estimate recursively the values of altitude and latitude.
             n_factor_old = ae
             alt_old = 0
             lat_old = _estimate_latitude(n_factor_old, alt_old)
             dif = np.asarray([1])
-
+            # Repeat recursive method until a tolerance is reached.
             while (dif > 0).all():
-
                 n_factor_new = np.where(
                     dif > 0, _estimate_n_factor(lat_old), n_factor_old)
                 alt_new = np.where(
@@ -292,25 +331,25 @@ class Orbit(object):
                 dif1 = np.abs(alt_new - alt_old)
                 dif2 = np.abs(lat_new - lat_old)
                 dif = dif1 + dif2 - GEODETIC_COORDINATES_TOLERANCE
-
+                # Overwrite old temporary variables with new values.
                 n_factor_old = n_factor_new
                 alt_old = alt_new
                 lat_old = lat_new
-
+            # Compute longitude for a specific time.
             alt = alt_old
             lat = lat_old
             lon = _estimate_longitude()
-
-            self._satellite_position_geod = np.asarray([lat, lon, alt]).T
+            # Set geodetic satellite position property.
+            self._satellite_position_geo = np.asarray([lat, lon, alt]).T
 
         _add_datetime(self, datetime)
         _calc_timedelta(self)
-
         _calc_mean_motion(self)
         _calc_mean_anomaly(self)
         _calc_eccentric_anomaly(self)
         _calc_true_anomaly(self)
         _calc_semimajor_axis(self)
         _calc_argument_of_perigee_and_longitude_of_the_ascending_node(self)
-        _calc_cartesian_coordinates(self)
-        _calc_geodetic_coordinates(self)
+        _calc_eci_coordinates(self)
+        _calc_ecf_coordinates(self)
+        _calc_geo_coordinates(self)
