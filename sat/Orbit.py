@@ -41,8 +41,10 @@ class Orbit(object):
         if ephemeris:
             self._ephemeris = ephemeris.to_copy()
         else:
-            raise OrbitError("Ephemeris instance is not complete")
-        pass
+            msg = "Ephemeris instance is not complete"
+            err = OrbitError(msg)
+            print(err)
+            exit()
 
     @property
     @returns(np.ndarray)
@@ -161,7 +163,7 @@ class Orbit(object):
                 exit()
 
         def _calc_mean_motion(self):
-            """Compute mean motion for a specific time."""
+            """Compute mean motion for a specific datetime."""
 
             # Call necessary properties.
             dt = self.timedelta
@@ -172,7 +174,7 @@ class Orbit(object):
             self._mean_motion = n0 + n1 * dt + 0.5 * n2 * dt**2
 
         def _calc_mean_anomaly(self):
-            """Compute mean anomaly for a specific time."""
+            """Compute mean anomaly for a specific datetime."""
 
             # Call necessary properties.
             dt = self.timedelta
@@ -182,7 +184,7 @@ class Orbit(object):
             self._mean_anomaly = m0 + n * dt
 
         def _calc_eccentric_anomaly(self):
-            """Compute eccentric anomaly for a specific time."""
+            """Compute eccentric anomaly for a specific datetime."""
 
             # Call necessary properties.
             eccent = self.ephemeris.eccentricity
@@ -199,7 +201,7 @@ class Orbit(object):
             self._eccentric_anomaly = ean_old
 
         def _calc_true_anomaly(self):
-            """Compute true anomaly for a specific time."""
+            """Compute true anomaly for a specific datetime."""
 
             # Call necessary properties.
             eccent = self.ephemeris.eccentricity
@@ -209,7 +211,7 @@ class Orbit(object):
             self._true_anomaly = 2 * np.arctan(factor * np.tan(ean/2))
 
         def _calc_semimajor_axis(self):
-            """Compute semimajor axis for a specific time."""
+            """Compute semimajor axis for a specific datetime."""
 
             # Call necessary constants and properties.
             mu = STANDARD_GRAVITATIONAL_PARAMETER
@@ -219,7 +221,7 @@ class Orbit(object):
 
         def _calc_argument_of_perigee_and_longitude_of_the_ascending_node(self):
             """Compute argument of perigee and longitude of the ascending
-            node for a specific time."""
+            node for a specific datetime."""
 
             # Call necessary constants.
             j2 = SECOND_ZONAL_TERM_J2
@@ -244,7 +246,7 @@ class Orbit(object):
             self._longitude_of_the_ascending_node = o0 + o1 * dt
 
         def _calc_eci_coordinates(self):
-            """Compute ECI cartesian coordinates for a specific time."""
+            """Compute ECI coordinates for a specific datetime."""
 
             # Call necessary properties.
             i = self.ephemeris.inclination.rad
@@ -264,7 +266,7 @@ class Orbit(object):
             self._satellite_position_eci = np.asarray([rx, ry, rz]).T
 
         def _calc_ecf_coordinates(self):
-            """Compute ECEF cartesian coordinates for a specific time."""
+            """Compute ECEF coordinates for a specific datetime."""
 
             # Call necessary constants.
             we = EARTH_ANGULAR_SPEED
@@ -293,7 +295,7 @@ class Orbit(object):
             self._satellite_position_ecf = np.hstack([rx_s, ry_s, rz_s])
 
         def _calc_geo_coordinates(self):
-            """Compute geodetic coordinates for a specific time."""
+            """Compute geodetic coordinates for a specific datetime."""
 
             # Call necessary constants.
             ae = EARTH_SEMIMAJOR_AXIS
