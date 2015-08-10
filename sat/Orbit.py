@@ -323,7 +323,7 @@ class Orbit(object):
             vz_s = vz
             # Set ECEF satellite position and velocity properties.
             self._satellite_position_ecf = np.hstack([rx_s, ry_s, rz_s])
-            self._satellite_velocity_eci = np.hstack([vx_s, vy_s, vz_s])
+            self._satellite_velocity_ecf = np.hstack([vx_s, vy_s, vz_s])
 
         def _calc_geo_coordinates(self):
             """Compute geodetic coordinates for a specific datetime."""
