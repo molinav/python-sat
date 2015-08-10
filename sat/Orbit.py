@@ -28,6 +28,8 @@ class Orbit(object):
         "satellite_position_ecf",
         "satellite_position_eci",
         "satellite_position_geo",
+        "satellite_velocity_ecf",
+        "satellite_velocity_eci",
         "semimajor_axis",
         "timedelta",
         "true_anomaly",
@@ -99,6 +101,18 @@ class Orbit(object):
     def satellite_position_eci(self):
         """satellite position in ECI reference system"""
         return self._satellite_position_eci
+
+    @property
+    @returns(np.ndarray)
+    def satellite_velocity_ecf(self):
+        """satellite velocity in ECEF reference system"""
+        return self._satellite_velocity_ecf
+
+    @property
+    @returns(np.ndarray)
+    def satellite_velocity_eci(self):
+        """satellite velocity in ECI reference system"""
+        return self._satellite_velocity_eci
 
     @property
     @returns(np.ndarray)
@@ -248,6 +262,8 @@ class Orbit(object):
         def _calc_eci_coordinates(self):
             """Compute ECI coordinates for a specific datetime."""
 
+            # Call necessary constants.
+            mu = STANDARD_GRAVITATIONAL_PARAMETER
             # Call necessary properties.
             i = self.ephemeris.inclination.rad
             o = self.longitude_of_the_ascending_node
@@ -258,12 +274,21 @@ class Orbit(object):
             # Compute intermediate factors.
             p = a * (1 - eccent**2)
             r = p / (1 + eccent * np.cos(v))
+            l = np.sqrt(mu * p)
             # Compute (X,Y,Z) coordinates in ECI reference system.
             rx = r * (np.cos(o)*np.cos(w+v) - np.sin(o)*np.sin(w+v)*np.cos(i))
             ry = r * (np.sin(o)*np.cos(w+v) + np.cos(o)*np.sin(w+v)*np.cos(i))
             rz = r * (np.sin(w+v)*np.sin(i))
-            # Set ECI satellite position property.
+            # Compute (Vx,Vy,Vz) velocities in ECI reference system.
+            vx = (rx * l * eccent)/(r * p) * np.sin(v) - l/r * (
+                np.cos(o)*np.sin(w+v) + np.sin(o)*np.cos(w+v)*np.cos(i))
+            vy = (ry * l * eccent)/(r * p) * np.sin(v) - l/r * (
+                np.sin(o)*np.sin(w+v) - np.cos(o)*np.cos(w+v)*np.cos(i))
+            vz = (rz * l * eccent)/(r * p) * np.sin(v) + l/r * (
+                np.cos(w+v)*np.sin(i))
+            # Set ECI satellite position and velocity properties.
             self._satellite_position_eci = np.asarray([rx, ry, rz]).T
+            self._satellite_velocity_eci = np.asarray([vx, vy, vz]).T
 
         def _calc_ecf_coordinates(self):
             """Compute ECEF coordinates for a specific datetime."""
@@ -274,6 +299,7 @@ class Orbit(object):
             t2 = np.datetime64("2000-01-01T00:00:00Z")
             # Call necessary properties.
             rx, ry, rz = self.satellite_position_eci.T
+            vx, vy, vz = self.satellite_velocity_eci.T
             # Compute Julian centuries since epoch 2000/01/01 12:00:00.
             dtm1 = ((self.datetime - t1) / np.timedelta64(1, "D")).astype(float)
             dtm1 = dtm1[:, np.newaxis] / 36525
@@ -291,8 +317,13 @@ class Orbit(object):
             rx_s = + np.cos(gst2)*rx + np.sin(gst2)*ry
             ry_s = - np.sin(gst2)*rx + np.cos(gst2)*ry
             rz_s = rz
-            # Set ECEF satellite position property.
+            # Compute (Vx,Vy,Vz) velocities in ECF reference system.
+            vx_s = + np.cos(gst2)*vx + np.sin(gst2)*vy
+            vy_s = - np.sin(gst2)*vx + np.cos(gst2)*vy
+            vz_s = vz
+            # Set ECEF satellite position and velocity properties.
             self._satellite_position_ecf = np.hstack([rx_s, ry_s, rz_s])
+            self._satellite_velocity_eci = np.hstack([vx_s, vy_s, vz_s])
 
         def _calc_geo_coordinates(self):
             """Compute geodetic coordinates for a specific datetime."""
