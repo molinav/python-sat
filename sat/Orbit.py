@@ -163,6 +163,7 @@ class Orbit(object):
 
         def _calc_timedelta(self):
             """Compute time difference with respect to epoch."""
+
             try:
                 fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
                 epoch = np.asarray([
@@ -318,6 +319,8 @@ class Orbit(object):
             ry_s = - np.sin(gst2)*rx + np.cos(gst2)*ry
             rz_s = rz
             # Compute (Vx,Vy,Vz) velocities in ECF reference system.
+            vx = vx + EARTH_ANGULAR_SPEED*ry
+            vy = vy - EARTH_ANGULAR_SPEED*rx
             vx_s = + np.cos(gst2)*vx + np.sin(gst2)*vy
             vy_s = - np.sin(gst2)*vx + np.cos(gst2)*vy
             vz_s = vz
