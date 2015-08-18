@@ -184,9 +184,8 @@ class Orbit(object):
             dt = self.timedelta
             n0 = self.ephemeris.mean_motion
             n1 = self.ephemeris.mean_motion_first_dif
-            n2 = self.ephemeris.mean_motion_second_dif
             # Set mean motion property.
-            self._mean_motion = n0 + n1 * dt + 0.5 * n2 * dt**2
+            self._mean_motion = n0 + n1 * dt
 
         def _calc_mean_anomaly(self):
             """Compute mean anomaly for a specific datetime."""
@@ -313,7 +312,7 @@ class Orbit(object):
             # also the angle between the ECI and ECEF reference systems).
             c0, c1, c2, c3 = [24110.54841, 8640184.812866, 0.093104, -6.2e-6]
             gst0 = c0 + c1 * dtm1 + c2 * dtm1**2 + c3 * dtm1**3
-            gst2 = (gst0/86400 * 2*np.pi) + we * dtm2
+            gst2 = (gst0/86400 * 2*np.pi) + we * dtm2 / 1.00278
             # Compute ECEF coordinates as a rotation of ECI coordinates.
             rx_s = + np.cos(gst2)*rx + np.sin(gst2)*ry
             ry_s = - np.sin(gst2)*rx + np.cos(gst2)*ry
@@ -389,3 +388,4 @@ class Orbit(object):
         _calc_eci_coordinates(self)
         _calc_ecf_coordinates(self)
         _calc_geo_coordinates(self)
+
