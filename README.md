@@ -8,8 +8,10 @@ Prerequisites
 -------------
 
 It is needed at least:
+
 * Python 2.6+, 3.2+
-* The "six" package for Python 2/3 compatibility
+* numpy 1.7+
+* six for Python 2/3 compatibility
 
 Installation
 ------------
