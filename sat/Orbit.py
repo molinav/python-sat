@@ -35,6 +35,7 @@ class Orbit(object):
         "_true_anomaly",
         ]
 
+    @accepts(Ephemeris)
     def __init__(self, ephemeris):
 
         for item in self.__slots__:
@@ -94,7 +95,7 @@ class Orbit(object):
             epoch = np.asarray([
                 obj.ephemeris.epoch_datetime.strftime(fmt)
                 ]).astype("datetime64")
-            delta = (obj.datetime - epoch)[:, np.newaxis]
+            delta = (obj.datetime - epoch)[:, None]
             obj._timedelta = (delta / np.timedelta64(1, "D")).astype(float)
         except TypeError:
             msg = "Ephemeris attribute from Orbit instance is not complete"
@@ -200,10 +201,10 @@ class Orbit(object):
         t2 = np.datetime64("2000-01-01T00:00:00Z")
         # Compute Julian centuries since epoch 2000/01/01 12:00:00.
         dtm1 = ((obj.datetime - t1) / np.timedelta64(1, "D")).astype(float)
-        dtm1 = dtm1[:, np.newaxis] / 36525
+        dtm1 = dtm1[:, None] / 36525
         # Compute UTC time for the datetime of interest.
         dtm2 = ((obj.datetime - t2) / np.timedelta64(1, "D")).astype(float)
-        dtm2 = dtm2[:, np.newaxis]
+        dtm2 = dtm2[:, None]
         dtm2 = ((dtm2 % dtm2.astype(int)) * 86400)
         # Compute the Greenwich Sidereal Time (GST), that is, the angle
         # between the vernal point and the Greenwich meridian (which is
@@ -242,20 +243,16 @@ class Orbit(object):
         vz = (rz * l * eccent)/(r * p) * np.sin(v) + l/r * (
             np.cos(w+v)*np.sin(i))
         # Set ECI satellite position and velocity properties.
-        obj._satellite_position_eci = np.asarray([rx, ry, rz]).T
-        obj._satellite_velocity_eci = np.asarray([vx, vy, vz]).T
+        obj._satellite_position_eci = np.hstack([rx, ry, rz])
+        obj._satellite_velocity_eci = np.hstack([vx, vy, vz])
 
     @classmethod
     def _calc_ecf_coordinates(cls, obj):
         """Compute ECEF coordinates for a specific datetime."""
 
-        # Call necessary constants.
-        we = EARTH_ANGULAR_SPEED
-        t1 = np.datetime64("2000-01-01T12:00:00Z")
-        t2 = np.datetime64("2000-01-01T00:00:00Z")
         # Call necessary properties.
-        rx, ry, rz = obj.satellite_position_eci.T
-        vx, vy, vz = obj.satellite_velocity_eci.T
+        rx, ry, rz = [x[:, None] for x in obj.satellite_position_eci.T]
+        vx, vy, vz = [x[:, None] for x in obj.satellite_velocity_eci.T]
         # Compute the Greenwich Sidereal Time (GST), that is, the angle
         # between the vernal point and the Greenwich meridian (which is
         # also the angle between the ECI and ECF reference systems).
@@ -282,7 +279,7 @@ class Orbit(object):
         ae = EARTH_SEMIMAJOR_AXIS
         e2 = EARTH_FLATTENING_FACTOR
         # Call necessary properties.
-        rx_s, ry_s, rz_s = obj.satellite_position_ecf.T
+        rx_s, ry_s, rz_s = [x[:, None] for x in obj.satellite_position_ecf.T]
         p_factor = np.sqrt(rx_s**2 + ry_s**2)
 
         def _estimate_n_factor(latitude):
@@ -323,7 +320,7 @@ class Orbit(object):
         lat = lat_old
         lon = _estimate_longitude()
         # Set geodetic satellite position property.
-        obj._satellite_position_geo = np.asarray([lat, lon, alt]).T
+        obj._satellite_position_geo = np.hstack([lat, lon, alt])
 
     @property
     @returns(np.ndarray)

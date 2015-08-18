@@ -26,41 +26,228 @@ import re
 
 class Ephemeris(object):
 
-    _properties = [
-        "argument_of_perigee",
-        "drag",
-        "eccentricity",
-        "element_set_number",
-        "epoch_datetime",
-        "epoch_revolution_number",
-        "inclination",
-        "launch_date",
-        "launch_piece",
-        "mean_anomaly",
-        "mean_motion",
-        "mean_motion_first_dif",
-        "mean_motion_second_dif",
-        "longitude_of_the_ascending_node",
-        "satellite_classification",
-        "satellite_name",
-        "satellite_number",
+    __slots__ = [
+        "_argument_of_perigee",
+        "_drag",
+        "_eccentricity",
+        "_element_set_number",
+        "_epoch_datetime",
+        "_epoch_revolution_number",
+        "_inclination",
+        "_launch_date",
+        "_launch_piece",
+        "_mean_anomaly",
+        "_mean_motion",
+        "_mean_motion_first_dif",
+        "_mean_motion_second_dif",
+        "_longitude_of_the_ascending_node",
+        "_satellite_classification",
+        "_satellite_name",
+        "_satellite_number",
         ]
 
     def __init__(self):
         """Constructor of a generic Ephemeris instance."""
 
-        for item in self._properties:
-            self.__setattr__("_{}".format(item), None)
+        for item in self.__slots__:
+            self.__setattr__(item, None)
 
     def __bool__(self):
         """Return True if all the instance attributes are well-defined."""
 
         try:
-            flag = min(self.__getattribute__("_{}".format(item)) is not None
-                       for item in self._properties)
+            flag = min(self.__getattribute__(item) is not None
+                       for item in self.__slots__)
         except (AssertionError, TypeError, ValueError):
             flag = False
         return flag
+
+    @staticmethod
+    @accepts(text_type, text_type, text_type, static=True)
+    def from_tle(title, line1, line2):
+        """Return an Ephemeris instance from a two-line element set.
+
+        Parameters:
+
+        title
+            two-line element set title
+        line1
+            first line of the two-line element set
+        line2
+            second line of the two-line element set
+        """
+
+        try:
+
+            # Remove \n characters from string lines.
+            obj = Ephemeris()
+            lst = [x.replace("\n", "") for x in (title, line1, line2)]
+
+            # Verify title, line1 and line2 with regular expressions.
+            match0 = re.match(PATTERN_TITLE, lst[0])
+            match1 = re.match(PATTERN_LINE1, lst[1])
+            match2 = re.match(PATTERN_LINE2, lst[2])
+
+            if not match0:
+                msg = "invalid structure for TLE title"
+                raise EphemerisError(msg)
+            if not match1:
+                msg = "invalid structure for TLE line 1"
+                raise EphemerisError(msg)
+            if not match2:
+                msg = "invalid structure for TLE line 2"
+                raise EphemerisError(msg)
+
+            # Start transcription of title.
+            tmp0 = match0.group(0).strip()
+            obj.satellite_name = tmp0
+
+            # Verify checksums.
+            chk1 = [int(match1.group(11)), int(match2.group(9))]
+            chk2 = [obj._calc_checksum(row[:-1]) for row in lst[1:]]
+            if chk1 != chk2:
+                msg = "checksum error, found {}, expected {}".format(chk1, chk2)
+                raise EphemerisError(msg)
+
+            # Verify and transcript satellite number.
+            tmp1 = int(match1.group(1))
+            tmp2 = int(match2.group(1))
+            if tmp1 != tmp2:
+                msg = "satellite number within the lines does not match"
+                raise EphemerisError(msg)
+            obj.satellite_number = tmp1
+
+            # Start transcription of line1.
+            # Transcript satellite classification.
+            tmp1 = match1.group(2)
+            obj.satellite_classification = tmp1
+
+            # Transcript launch date.
+            tmp1 = datetime.strptime(match1.group(3), "%y%j").date()
+            obj.launch_date = tmp1
+
+            # Transcript launch piece.
+            tmp1 = match1.group(4).strip()
+            obj.launch_piece = tmp1
+
+            # Transcript epoch datetime.
+            day1 = match1.group(5)
+            day2 = match1.group(6)
+            tmp1 = datetime.strptime(day1, "%y%j") + timedelta(days=float(day2))
+            obj.epoch_datetime = tmp1
+
+            # Transcript first derivative of mean motion.
+            tmp1 = 2 * float(match1.group(7))
+            obj.mean_motion_first_dif = tmp1
+
+            # Transcript second derivative of mean motion.
+            tmp1 = match1.group(8)
+            tmp1 = 6 * float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
+            obj.mean_motion_second_dif = tmp1
+
+            # Transcript drag term.
+            tmp1 = match1.group(9)
+            tmp1 = float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
+            obj.drag = tmp1
+
+            # Transcript element set number.
+            tmp1 = int(match1.group(10))
+            obj.element_set_number = tmp1
+
+            # Start transcription of line2.
+            # Transcript inclination.
+            tmp2 = ZenAngle(deg=float(match2.group(2)))
+            obj.inclination = tmp2
+
+            # Transcript longitude of the ascending node.
+            tmp2 = AziAngle(deg=float(match2.group(3)))
+            obj.longitude_of_the_ascending_node = tmp2
+
+            # Transcript eccentricity.
+            tmp2 = float(".{}".format(match2.group(4)))
+            obj.eccentricity = tmp2
+
+            # Transcript argument of perigee.
+            tmp2 = AziAngle(deg=float(match2.group(5)))
+            obj.argument_of_perigee = tmp2
+
+            # Transcript mean anomaly.
+            tmp2 = AziAngle(deg=float(match2.group(6)))
+            obj.mean_anomaly = tmp2
+
+            # Transcript mean motion.
+            tmp2 = float(match2.group(7))
+            obj.mean_motion = tmp2
+
+            # Transcript revolution number at epoch.
+            tmp2 = int(match2.group(8))
+            obj._epoch_revolution_number = tmp2
+
+            # Return the Ephemeris instance.
+            return obj
+
+        except EphemerisError as err:
+            err.__cause__ = None
+            print(err)
+
+    def to_copy(self):
+        """Return a deep copy of the Ephemeris instance."""
+
+        obj = Ephemeris()
+        for item in self.__slots__:
+            obj.__setattr__(item, self.__getattribute__(item))
+        return obj
+
+    def to_tle(self):
+        """Return a two-line element set as a list."""
+
+        if not self:
+            msg = "Ephemeris instance is not complete"
+            raise AttributeError(msg)
+
+        title = self.satellite_name.ljust(24)
+        line1 = text_type(
+            "1 {:5d}{:1s} {:5s}{:3s} {:5s}{:9s} {:1s}{:9s} {:8s} {:8s} 0 {:4d}".
+            format(self.satellite_number,
+                   self.satellite_classification,
+                   self.launch_date.strftime("%y%j"),
+                   self.launch_piece.ljust(3),
+                   self.epoch_datetime.strftime("%y%j"),
+                   "{:10.8f}".format(
+                       timedelta(0,
+                                 self.epoch_datetime.second,
+                                 self.epoch_datetime.microsecond,
+                                 0,
+                                 self.epoch_datetime.minute,
+                                 self.epoch_datetime.hour,
+                                 0,
+                                 ).total_seconds()/86400)[1:],
+                   "-" if self.mean_motion_first_dif < 0 else " ",
+                   "{:10.8f}".format(abs(self.mean_motion_first_dif)/2)[1:],
+                   " 00000-0" if self.mean_motion_second_dif == 0 else
+                   "{: =06d}{:+d}".
+                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
+                            ["{:.5e}".format(
+                             self.mean_motion_second_dif/6).split("e")]][0]),
+                   " 00000-0" if self.drag == 0 else
+                   "{: =06d}{:+d}".
+                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
+                            ["{:.5e}".format(
+                             self.drag).split("e")]][0]),
+                   self.element_set_number))
+        line2 = text_type(
+            "2 {:5d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5d}".
+            format(self.satellite_number,
+                   self.inclination.deg,
+                   self.longitude_of_the_ascending_node.deg,
+                   "{:9.7f}".format(self.eccentricity)[2:],
+                   self.argument_of_perigee.deg,
+                   self.mean_anomaly.deg,
+                   self.mean_motion,
+                   self.epoch_revolution_number))
+        line1 = "".join([line1, text_type(self._calc_checksum(line1))])
+        line2 = "".join([line2, text_type(self._calc_checksum(line2))])
+        return [title, line1, line2]
 
     @property
     @returns(AziAngle)
@@ -341,191 +528,3 @@ class Ephemeris(object):
 
         nums = re.findall("\d", line.replace("-", "1"))
         return sum(int(x) for x in nums) % 10 if nums else 0
-
-    @staticmethod
-    @accepts(text_type, text_type, text_type, static=True)
-    def from_tle(title, line1, line2):
-        """Return an Ephemeris instance from a two-line element set.
-
-        Parameters:
-
-        title
-            two-line element set title
-        line1
-            first line of the two-line element set
-        line2
-            second line of the two-line element set
-        """
-
-        try:
-
-            # Remove \n characters from string lines.
-            obj = Ephemeris()
-            lst = [x.replace("\n", "") for x in (title, line1, line2)]
-
-            # Verify title, line1 and line2 with regular expressions.
-            match0 = re.match(PATTERN_TITLE, lst[0])
-            match1 = re.match(PATTERN_LINE1, lst[1])
-            match2 = re.match(PATTERN_LINE2, lst[2])
-
-            if not match0:
-                msg = "invalid structure for TLE title"
-                raise EphemerisError(msg)
-            if not match1:
-                msg = "invalid structure for TLE line 1"
-                raise EphemerisError(msg)
-            if not match2:
-                msg = "invalid structure for TLE line 2"
-                raise EphemerisError(msg)
-
-            # Start transcription of title.
-            tmp0 = match0.group(0).strip()
-            obj.satellite_name = tmp0
-
-            # Verify checksums.
-            chk1 = [int(match1.group(11)), int(match2.group(9))]
-            chk2 = [obj._calc_checksum(row[:-1]) for row in lst[1:]]
-            if chk1 != chk2:
-                msg = "checksum error, found {}, expected {}".format(chk1, chk2)
-                raise EphemerisError(msg)
-
-            # Verify and transcript satellite number.
-            tmp1 = int(match1.group(1))
-            tmp2 = int(match2.group(1))
-            if tmp1 != tmp2:
-                msg = "satellite number within the lines does not match"
-                raise EphemerisError(msg)
-            obj.satellite_number = tmp1
-
-            # Start transcription of line1.
-            # Transcript satellite classification.
-            tmp1 = match1.group(2)
-            obj.satellite_classification = tmp1
-
-            # Transcript launch date.
-            tmp1 = datetime.strptime(match1.group(3), "%y%j").date()
-            obj.launch_date = tmp1
-
-            # Transcript launch piece.
-            tmp1 = match1.group(4).strip()
-            obj.launch_piece = tmp1
-
-            # Transcript epoch datetime.
-            day1 = match1.group(5)
-            day2 = match1.group(6)
-            tmp1 = datetime.strptime(day1, "%y%j") + timedelta(days=float(day2))
-            obj.epoch_datetime = tmp1
-
-            # Transcript first derivative of mean motion.
-            tmp1 = 2 * float(match1.group(7))
-            obj.mean_motion_first_dif = tmp1
-
-            # Transcript second derivative of mean motion.
-            tmp1 = match1.group(8)
-            tmp1 = 6 * float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
-            obj.mean_motion_second_dif = tmp1
-
-            # Transcript drag term.
-            tmp1 = match1.group(9)
-            tmp1 = float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
-            obj.drag = tmp1
-
-            # Transcript element set number.
-            tmp1 = int(match1.group(10))
-            obj.element_set_number = tmp1
-
-            # Start transcription of line2.
-            # Transcript inclination.
-            tmp2 = ZenAngle(deg=float(match2.group(2)))
-            obj.inclination = tmp2
-
-            # Transcript longitude of the ascending node.
-            tmp2 = AziAngle(deg=float(match2.group(3)))
-            obj.longitude_of_the_ascending_node = tmp2
-
-            # Transcript eccentricity.
-            tmp2 = float(".{}".format(match2.group(4)))
-            obj.eccentricity = tmp2
-
-            # Transcript argument of perigee.
-            tmp2 = AziAngle(deg=float(match2.group(5)))
-            obj.argument_of_perigee = tmp2
-
-            # Transcript mean anomaly.
-            tmp2 = AziAngle(deg=float(match2.group(6)))
-            obj.mean_anomaly = tmp2
-
-            # Transcript mean motion.
-            tmp2 = float(match2.group(7))
-            obj.mean_motion = tmp2
-
-            # Transcript revolution number at epoch.
-            tmp2 = int(match2.group(8))
-            obj._epoch_revolution_number = tmp2
-
-            # Return the Ephemeris instance.
-            return obj
-
-        except EphemerisError as err:
-            err.__cause__ = None
-            print(err)
-
-    def to_copy(self):
-        """Return a deep copy of the Ephemeris instance."""
-
-        obj = Ephemeris()
-        for item in self._properties:
-            attr = "_{}".format(item)
-            obj.__setattr__(attr, self.__getattribute__(attr))
-        return obj
-
-    def to_tle(self):
-        """Return a two-line element set as a list."""
-
-        if not self:
-            msg = "Ephemeris instance is not complete"
-            raise AttributeError(msg)
-
-        title = self.satellite_name.ljust(24)
-        line1 = text_type(
-            "1 {:5d}{:1s} {:5s}{:3s} {:5s}{:9s} {:1s}{:9s} {:8s} {:8s} 0 {:4d}".
-            format(self.satellite_number,
-                   self.satellite_classification,
-                   self.launch_date.strftime("%y%j"),
-                   self.launch_piece.ljust(3),
-                   self.epoch_datetime.strftime("%y%j"),
-                   "{:10.8f}".format(
-                       timedelta(0,
-                                 self.epoch_datetime.second,
-                                 self.epoch_datetime.microsecond,
-                                 0,
-                                 self.epoch_datetime.minute,
-                                 self.epoch_datetime.hour,
-                                 0,
-                                 ).total_seconds()/86400)[1:],
-                   "-" if self.mean_motion_first_dif < 0 else " ",
-                   "{:10.8f}".format(abs(self.mean_motion_first_dif)/2)[1:],
-                   " 00000-0" if self.mean_motion_second_dif == 0 else
-                   "{: =06d}{:+d}".
-                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
-                            ["{:.5e}".format(
-                             self.mean_motion_second_dif/6).split("e")]][0]),
-                   " 00000-0" if self.drag == 0 else
-                   "{: =06d}{:+d}".
-                   format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
-                            ["{:.5e}".format(
-                             self.drag).split("e")]][0]),
-                   self.element_set_number))
-        line2 = text_type(
-            "2 {:5d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5d}".
-            format(self.satellite_number,
-                   self.inclination.deg,
-                   self.longitude_of_the_ascending_node.deg,
-                   "{:9.7f}".format(self.eccentricity)[2:],
-                   self.argument_of_perigee.deg,
-                   self.mean_anomaly.deg,
-                   self.mean_motion,
-                   self.epoch_revolution_number))
-        line1 = "".join([line1, text_type(self._calc_checksum(line1))])
-        line2 = "".join([line2, text_type(self._calc_checksum(line2))])
-        return [title, line1, line2]
