@@ -19,6 +19,10 @@ from numbers import Real
 class Angle(object):
     """Base class which handles angles in different notations."""
 
+    __slots__ = [
+        "_angle",
+        ]
+
     _angle_min = -INFINITY
     _angle_max = +INFINITY
     _limit_min = "["
