@@ -28,7 +28,7 @@ class Ephemeris(object):
 
     __slots__ = [
         "_argument_of_perigee",
-        "_drag",
+        "_drag_term",
         "_eccentricity",
         "_element_set_number",
         "_epoch_datetime",
@@ -61,6 +61,40 @@ class Ephemeris(object):
         except (AssertionError, TypeError, ValueError):
             flag = False
         return flag
+
+    def __repr__(self):
+        """Fancy representation of an Ephemeris instance."""
+
+        suplist = [
+            [item[1:].replace("_", " ") + ":", self.__getattribute__(item)]
+            for item in self.__slots__
+            ]
+        suplist = [
+            [x, y if not isinstance(y, (AziAngle, ZenAngle)) else y.deg]
+            for (x, y) in suplist
+            ]
+
+        text = (
+            "\nEphemeris information\n"
+            "\n  {:35s} {:.4f} deg"
+            "\n  {:35s} {:.4e} per Earth radii"
+            "\n  {:35s} {:.7f}"
+            "\n  {:35s} {}"
+            "\n  {:35s} {}"
+            "\n  {:35s} {}"
+            "\n  {:35s} {:.4f} deg"
+            "\n  {:35s} {}"
+            "\n  {:35s} {}"
+            "\n  {:35s} {:.4f} deg"
+            "\n  {:35s} {:.8f} rev per day"
+            "\n  {:35s} {:.4e} rev per day^2"
+            "\n  {:35s} {:.4e} rev per day^3"
+            "\n  {:35s} {:.4f} deg"
+            "\n  {:35s} {}"
+            "\n  {:35s} {}"
+            "\n  {:35s} {}").format(
+                *[item for sublist in suplist for item in sublist])
+        return text
 
     @staticmethod
     @accepts(text_type, text_type, text_type, static=True)
@@ -148,7 +182,7 @@ class Ephemeris(object):
             # Transcript drag term.
             tmp1 = match1.group(9)
             tmp1 = float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
-            obj.drag = tmp1
+            obj.drag_term = tmp1
 
             # Transcript element set number.
             tmp1 = int(match1.group(10))
@@ -229,11 +263,11 @@ class Ephemeris(object):
                    format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
                             ["{:.5e}".format(
                              self.mean_motion_second_dif/6).split("e")]][0]),
-                   " 00000-0" if self.drag == 0 else
+                   " 00000-0" if self.drag_term == 0 else
                    "{: =06d}{:+d}".
                    format(*[[int(round(float(x)*10000)), int(y)+1] for x, y in
                             ["{:.5e}".format(
-                             self.drag).split("e")]][0]),
+                             self.drag_term).split("e")]][0]),
                    self.element_set_number))
         line2 = text_type(
             "2 {:5d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5d}".
@@ -266,18 +300,18 @@ class Ephemeris(object):
 
     @property
     @returns(float)
-    def drag(self):
+    def drag_term(self):
         """BSTAR radiation pressure coefficient in per Earth radii"""
-        return self._drag
+        return self._drag_term
 
-    @drag.setter
+    @drag_term.setter
     @accepts(float)
-    def drag(self, val):
-        self._drag = val
+    def drag_term(self, val):
+        self._drag_term = val
 
-    @drag.deleter
-    def drag(self):
-        self._drag = None
+    @drag_term.deleter
+    def drag_term(self):
+        self._drag_term = None
 
     @property
     @returns(float)
