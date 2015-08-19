@@ -25,14 +25,14 @@ class Orbit(object):
         "_longitude_of_the_ascending_node",
         "_mean_anomaly",
         "_mean_motion",
-        "_satellite_position_ecf",
-        "_satellite_position_eci",
-        "_satellite_position_geo",
-        "_satellite_velocity_ecf",
-        "_satellite_velocity_eci",
+        "_position_ecf",
+        "_position_eci",
+        "_position_geo",
         "_semimajor_axis",
         "_timedelta",
         "_true_anomaly",
+        "_velocity_ecf",
+        "_velocity_eci",
         ]
 
     @accepts(Ephemeris)
@@ -243,16 +243,16 @@ class Orbit(object):
         vz = (rz * l * eccent)/(r * p) * np.sin(v) + l/r * (
             np.cos(w+v)*np.sin(i))
         # Set ECI satellite position and velocity properties.
-        obj._satellite_position_eci = np.hstack([rx, ry, rz])
-        obj._satellite_velocity_eci = np.hstack([vx, vy, vz])
+        obj._position_eci = np.hstack([rx, ry, rz])
+        obj._velocity_eci = np.hstack([vx, vy, vz])
 
     @classmethod
     def _calc_ecf_coordinates(cls, obj):
-        """Compute ECEF coordinates for a specific datetime."""
+        """Compute ECF coordinates for a specific datetime."""
 
         # Call necessary properties.
-        rx, ry, rz = [x[:, None] for x in obj.satellite_position_eci.T]
-        vx, vy, vz = [x[:, None] for x in obj.satellite_velocity_eci.T]
+        rx, ry, rz = [x[:, None] for x in obj.position_eci.T]
+        vx, vy, vz = [x[:, None] for x in obj.velocity_eci.T]
         # Compute the Greenwich Sidereal Time (GST), that is, the angle
         # between the vernal point and the Greenwich meridian (which is
         # also the angle between the ECI and ECF reference systems).
@@ -268,8 +268,8 @@ class Orbit(object):
         vy_s = - np.sin(gst)*vx + np.cos(gst)*vy
         vz_s = vz
         # Set ECF satellite position and velocity properties.
-        obj._satellite_position_ecf = np.hstack([rx_s, ry_s, rz_s])
-        obj._satellite_velocity_ecf = np.hstack([vx_s, vy_s, vz_s])
+        obj._position_ecf = np.hstack([rx_s, ry_s, rz_s])
+        obj._velocity_ecf = np.hstack([vx_s, vy_s, vz_s])
 
     @classmethod
     def _calc_geo_coordinates(cls, obj):
@@ -279,7 +279,7 @@ class Orbit(object):
         ae = EARTH_SEMIMAJOR_AXIS
         e2 = EARTH_FLATTENING_FACTOR
         # Call necessary properties.
-        rx_s, ry_s, rz_s = [x[:, None] for x in obj.satellite_position_ecf.T]
+        rx_s, ry_s, rz_s = [x[:, None] for x in obj.position_ecf.T]
         p_factor = np.sqrt(rx_s**2 + ry_s**2)
 
         def _estimate_n_factor(latitude):
@@ -320,7 +320,7 @@ class Orbit(object):
         lat = lat_old
         lon = _estimate_longitude()
         # Set geodetic satellite position property.
-        obj._satellite_position_geo = np.hstack([lat, lon, alt])
+        obj._position_geo = np.hstack([lat, lon, alt])
 
     @property
     @returns(np.ndarray)
@@ -366,33 +366,33 @@ class Orbit(object):
 
     @property
     @returns(np.ndarray)
-    def satellite_position_ecf(self):
+    def position_ecf(self):
         """satellite position in ECEF reference system"""
-        return self._satellite_position_ecf
+        return self._position_ecf
 
     @property
     @returns(np.ndarray)
-    def satellite_position_eci(self):
+    def position_eci(self):
         """satellite position in ECI reference system"""
-        return self._satellite_position_eci
+        return self._position_eci
 
     @property
     @returns(np.ndarray)
-    def satellite_velocity_ecf(self):
+    def velocity_ecf(self):
         """satellite velocity in ECEF reference system"""
-        return self._satellite_velocity_ecf
+        return self._velocity_ecf
 
     @property
     @returns(np.ndarray)
-    def satellite_velocity_eci(self):
+    def velocity_eci(self):
         """satellite velocity in ECI reference system"""
-        return self._satellite_velocity_eci
+        return self._velocity_eci
 
     @property
     @returns(np.ndarray)
-    def satellite_position_geo(self):
+    def position_geo(self):
         """satellite position in geodetic reference system"""
-        return self._satellite_position_geo
+        return self._position_geo
 
     @property
     @returns(np.ndarray)
