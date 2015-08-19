@@ -37,6 +37,7 @@ class Orbit(object):
 
     @accepts(Ephemeris)
     def __init__(self, ephemeris):
+        """Constructor of a generic Orbit instance."""
 
         for item in self.__slots__:
             self.__setattr__(item, None)
