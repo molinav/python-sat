@@ -385,7 +385,7 @@ class Orbit(object):
     @property
     @returns(np.ndarray)
     def position_ecf(self):
-        """satellite position in ECEF reference system"""
+        """satellite position in ECF reference system"""
         return self._position_ecf
 
     @property
@@ -396,8 +396,14 @@ class Orbit(object):
 
     @property
     @returns(np.ndarray)
+    def position_geo(self):
+        """satellite position in geodetic reference system"""
+        return self._position_geo
+
+    @property
+    @returns(np.ndarray)
     def velocity_ecf(self):
-        """satellite velocity in ECEF reference system"""
+        """satellite velocity in ECF reference system"""
         return self._velocity_ecf
 
     @property
@@ -405,12 +411,6 @@ class Orbit(object):
     def velocity_eci(self):
         """satellite velocity in ECI reference system"""
         return self._velocity_eci
-
-    @property
-    @returns(np.ndarray)
-    def position_geo(self):
-        """satellite position in geodetic reference system"""
-        return self._position_geo
 
     @property
     @returns(np.ndarray)
