@@ -68,9 +68,9 @@ class Orbit(object):
         sup._calc_true_anomaly(self)
         sup._calc_semimajor_axis(self)
         sup._calc_argument_of_perigee_and_longitude_of_the_ascending_node(self)
-        sup._calc_eci_coordinates(self)
-        sup._calc_ecf_coordinates(self)
-        sup._calc_geo_coordinates(self)
+        sup._calc_coordinates_from_orb_to_eci(self)
+        sup._calc_coordinates_from_eci_to_ecf(self)
+        sup._calc_coordinates_from_ecf_to_geo(self)
 
     @classmethod
     def _add_datetime(cls, obj, date):
@@ -215,7 +215,7 @@ class Orbit(object):
         return gst
 
     @classmethod
-    def _calc_eci_coordinates(cls, obj):
+    def _calc_coordinates_from_orb_to_eci(cls, obj):
         """Compute ECI coordinates for a specific datetime."""
 
         # Call necessary constants.
@@ -247,7 +247,7 @@ class Orbit(object):
         obj._velocity_eci = np.hstack([vx, vy, vz])
 
     @classmethod
-    def _calc_ecf_coordinates(cls, obj):
+    def _calc_coordinates_from_eci_to_ecf(cls, obj):
         """Compute ECF coordinates for a specific datetime."""
 
         # Call necessary properties.
@@ -272,7 +272,7 @@ class Orbit(object):
         obj._velocity_ecf = np.hstack([vx_s, vy_s, vz_s])
 
     @classmethod
-    def _calc_geo_coordinates(cls, obj):
+    def _calc_coordinates_from_ecf_to_geo(cls, obj):
         """Compute geodetic coordinates for a specific datetime."""
 
         # Call necessary constants.
@@ -321,6 +321,24 @@ class Orbit(object):
         lon = _estimate_longitude()
         # Set geodetic satellite position property.
         obj._position_geo = np.hstack([lat, lon, alt])
+
+    @classmethod
+    def _calc_coordinates_from_geo_to_ecf(cls, obj):
+        """Compute ECF coordinates using geodetic coordinates."""
+
+        # Call necessary constants.
+        ae = EARTH_SEMIMAJOR_AXIS
+        e2 = EARTH_FLATTENING_FACTOR
+        # Call necessary properties.
+        lat, lon, alt = [x[:, None] for x in obj.position_geo.T]
+
+        # Compute ECF coordinates.
+        n = ae / np.sqrt(1 - e2 * np.sin(lat)**2)
+        rx_s = (n + alt) * np.cos(lat) * np.cos(lon)
+        ry_s = (n + alt) * np.cos(lat) * np.sin(lon)
+        rz_s = (n * (1 - e2) + alt) * np.sin(lat)
+        # Set ECF satellite position property
+        obj._position_ecf = np.hstack([rx_s, ry_s, rz_s])
 
     @property
     @returns(np.ndarray)
