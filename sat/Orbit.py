@@ -37,7 +37,13 @@ class Orbit(object):
 
     @accepts(Ephemeris)
     def __init__(self, ephemeris):
-        """Constructor of a generic Orbit instance."""
+        """Constructor of a generic Orbit instance.
+
+        Parameters:
+
+        ephemeris
+            Ephemeris instance containing the Kepler parameters
+        """
 
         for item in self.__slots__:
             self.__setattr__(item, None)

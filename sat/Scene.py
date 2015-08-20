@@ -34,9 +34,17 @@ class Scene(object):
         "_start_datetime",
         ]
 
-    @accepts(text_type, list)
-    def __init__(self, path, tlelist):
-        """Constructor of a generic Scene instance."""
+    @accepts(text_type, Ephemeris)
+    def __init__(self, path, ephemeris):
+        """Constructor of a generic Scene instance.
+
+        Parameters:
+
+        path
+            string path where the image is stored
+        ephemeris
+            Ephemeris instance containing the Kepler parameters
+        """
 
         # Check that the dataset is valid.
         dataset = Open(path)
@@ -49,8 +57,7 @@ class Scene(object):
         for item in self.__slots__:
             self.__setattr__(item, None)
         # Build Orbit instance from list of TLE lines.
-        ephem = Ephemeris.from_tle(*tlelist)
-        orbit = Orbit(ephem)
+        orbit = Orbit(ephemeris.to_copy())
         # Set main attributes.
         self._dataset = dataset
         self._orbit = orbit
