@@ -11,7 +11,9 @@ class SatError(Exception):
         """Generic text structure for printing a SatError."""
 
         title = self.__class__.__name__
-        return "{}: {}".format(title, self.message)
+        delstr = 26*"\b"
+        msgstr = "{}: {}".format(title, self.message).ljust(26)
+        return "{}{}".format(delstr, msgstr)
 
 
 class EphemerisError(SatError):
