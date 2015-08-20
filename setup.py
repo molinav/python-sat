@@ -16,9 +16,8 @@ setup(
     version="0.1dev",
     packages=[
         "sat",
-        "sat._constants",
-        "sat._decorators",
-        "sat._errors",
+        "sat.constants",
+        "sat.decorators",
         "sat.filepath"],
     license="GNU General Public License Version 3",
     long_description=open("README.md").read(),

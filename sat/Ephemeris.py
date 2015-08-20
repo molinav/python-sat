@@ -1,22 +1,22 @@
 from __future__ import division
-from . _constants.Ephemeris import LIMITS_ECCENTRICITY
-from . _constants.Ephemeris import LIMITS_ELEMENT_SET_NUMBER
-from . _constants.Ephemeris import LIMITS_EPOCH_REVOLUTION_NUMBER
-from . _constants.Ephemeris import LIMITS_MEAN_MOTION_FIRST_DIF
-from . _constants.Ephemeris import LIMITS_SATELLITE_NUMBER
-from . _constants.Ephemeris import PATTERN_LAUNCH_PIECE
-from . _constants.Ephemeris import PATTERN_SATELLITE_CLASSIFICATION
-from . _constants.Ephemeris import PATTERN_SATELLITE_NAME
-from . _constants.Ephemeris import PATTERN_TITLE
-from . _constants.Ephemeris import PATTERN_LINE1
-from . _constants.Ephemeris import PATTERN_LINE2
-from . _decorators import accepts
-from . _decorators import limits
-from . _decorators import pattern
-from . _decorators import returns
-from . _errors.Ephemeris import EphemerisError
+from . constants.Ephemeris import LIMITS_ECCENTRICITY
+from . constants.Ephemeris import LIMITS_ELEMENT_SET_NUMBER
+from . constants.Ephemeris import LIMITS_EPOCH_REVOLUTION_NUMBER
+from . constants.Ephemeris import LIMITS_MEAN_MOTION_FIRST_DIF
+from . constants.Ephemeris import LIMITS_SATELLITE_NUMBER
+from . constants.Ephemeris import PATTERN_LAUNCH_PIECE
+from . constants.Ephemeris import PATTERN_SATELLITE_CLASSIFICATION
+from . constants.Ephemeris import PATTERN_SATELLITE_NAME
+from . constants.Ephemeris import PATTERN_TITLE
+from . constants.Ephemeris import PATTERN_LINE1
+from . constants.Ephemeris import PATTERN_LINE2
+from . decorators import accepts
+from . decorators import limits
+from . decorators import pattern
+from . decorators import returns
 from . Angle import AziAngle
 from . Angle import ZenAngle
+from . Error import EphemerisError
 from datetime import datetime
 from datetime import date
 from datetime import timedelta
@@ -111,118 +111,112 @@ class Ephemeris(object):
             second line of the two-line element set
         """
 
-        try:
+        # Remove \n characters from string lines.
+        obj = Ephemeris()
+        lst = [x.replace("\n", "") for x in (title, line1, line2)]
 
-            # Remove \n characters from string lines.
-            obj = Ephemeris()
-            lst = [x.replace("\n", "") for x in (title, line1, line2)]
+        # Verify title, line1 and line2 with regular expressions.
+        match0 = re.match(PATTERN_TITLE, lst[0])
+        match1 = re.match(PATTERN_LINE1, lst[1])
+        match2 = re.match(PATTERN_LINE2, lst[2])
 
-            # Verify title, line1 and line2 with regular expressions.
-            match0 = re.match(PATTERN_TITLE, lst[0])
-            match1 = re.match(PATTERN_LINE1, lst[1])
-            match2 = re.match(PATTERN_LINE2, lst[2])
+        if not match0:
+            msg = "invalid structure for TLE title"
+            raise EphemerisError(msg)
+        if not match1:
+            msg = "invalid structure for TLE line 1"
+            raise EphemerisError(msg)
+        if not match2:
+            msg = "invalid structure for TLE line 2"
+            raise EphemerisError(msg)
 
-            if not match0:
-                msg = "invalid structure for TLE title"
-                raise EphemerisError(msg)
-            if not match1:
-                msg = "invalid structure for TLE line 1"
-                raise EphemerisError(msg)
-            if not match2:
-                msg = "invalid structure for TLE line 2"
-                raise EphemerisError(msg)
+        # Start transcription of title.
+        tmp0 = match0.group(0).strip()
+        obj.satellite_name = tmp0
 
-            # Start transcription of title.
-            tmp0 = match0.group(0).strip()
-            obj.satellite_name = tmp0
+        # Verify checksums.
+        chk1 = [int(match1.group(11)), int(match2.group(9))]
+        chk2 = [obj._calc_checksum(row[:-1]) for row in lst[1:]]
+        if chk1 != chk2:
+            msg = "checksum error, found {}, expected {}".format(chk1, chk2)
+            raise EphemerisError(msg)
 
-            # Verify checksums.
-            chk1 = [int(match1.group(11)), int(match2.group(9))]
-            chk2 = [obj._calc_checksum(row[:-1]) for row in lst[1:]]
-            if chk1 != chk2:
-                msg = "checksum error, found {}, expected {}".format(chk1, chk2)
-                raise EphemerisError(msg)
+        # Verify and transcript satellite number.
+        tmp1 = int(match1.group(1))
+        tmp2 = int(match2.group(1))
+        if tmp1 != tmp2:
+            msg = "satellite number within the lines does not match"
+            raise EphemerisError(msg)
+        obj.satellite_number = tmp1
 
-            # Verify and transcript satellite number.
-            tmp1 = int(match1.group(1))
-            tmp2 = int(match2.group(1))
-            if tmp1 != tmp2:
-                msg = "satellite number within the lines does not match"
-                raise EphemerisError(msg)
-            obj.satellite_number = tmp1
+        # Start transcription of line1.
+        # Transcript satellite classification.
+        tmp1 = match1.group(2)
+        obj.satellite_classification = tmp1
 
-            # Start transcription of line1.
-            # Transcript satellite classification.
-            tmp1 = match1.group(2)
-            obj.satellite_classification = tmp1
+        # Transcript launch date.
+        tmp1 = datetime.strptime(match1.group(3), "%y%j").date()
+        obj.launch_date = tmp1
 
-            # Transcript launch date.
-            tmp1 = datetime.strptime(match1.group(3), "%y%j").date()
-            obj.launch_date = tmp1
+        # Transcript launch piece.
+        tmp1 = match1.group(4).strip()
+        obj.launch_piece = tmp1
 
-            # Transcript launch piece.
-            tmp1 = match1.group(4).strip()
-            obj.launch_piece = tmp1
+        # Transcript epoch datetime.
+        day1 = match1.group(5)
+        day2 = match1.group(6)
+        tmp1 = datetime.strptime(day1, "%y%j") + timedelta(days=float(day2))
+        obj.epoch_datetime = tmp1
 
-            # Transcript epoch datetime.
-            day1 = match1.group(5)
-            day2 = match1.group(6)
-            tmp1 = datetime.strptime(day1, "%y%j") + timedelta(days=float(day2))
-            obj.epoch_datetime = tmp1
+        # Transcript first derivative of mean motion.
+        tmp1 = 2 * float(match1.group(7))
+        obj.mean_motion_first_dif = tmp1
 
-            # Transcript first derivative of mean motion.
-            tmp1 = 2 * float(match1.group(7))
-            obj.mean_motion_first_dif = tmp1
+        # Transcript second derivative of mean motion.
+        tmp1 = match1.group(8)
+        tmp1 = 6 * float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
+        obj.mean_motion_second_dif = tmp1
 
-            # Transcript second derivative of mean motion.
-            tmp1 = match1.group(8)
-            tmp1 = 6 * float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
-            obj.mean_motion_second_dif = tmp1
+        # Transcript drag term.
+        tmp1 = match1.group(9)
+        tmp1 = float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
+        obj.drag_term = tmp1
 
-            # Transcript drag term.
-            tmp1 = match1.group(9)
-            tmp1 = float("{}.{}e{}".format(tmp1[0], tmp1[1:6], tmp1[6:]))
-            obj.drag_term = tmp1
+        # Transcript element set number.
+        tmp1 = int(match1.group(10))
+        obj.element_set_number = tmp1
 
-            # Transcript element set number.
-            tmp1 = int(match1.group(10))
-            obj.element_set_number = tmp1
+        # Start transcription of line2.
+        # Transcript inclination.
+        tmp2 = ZenAngle(deg=float(match2.group(2)))
+        obj.inclination = tmp2
 
-            # Start transcription of line2.
-            # Transcript inclination.
-            tmp2 = ZenAngle(deg=float(match2.group(2)))
-            obj.inclination = tmp2
+        # Transcript longitude of the ascending node.
+        tmp2 = AziAngle(deg=float(match2.group(3)))
+        obj.longitude_of_the_ascending_node = tmp2
 
-            # Transcript longitude of the ascending node.
-            tmp2 = AziAngle(deg=float(match2.group(3)))
-            obj.longitude_of_the_ascending_node = tmp2
+        # Transcript eccentricity.
+        tmp2 = float(".{}".format(match2.group(4)))
+        obj.eccentricity = tmp2
 
-            # Transcript eccentricity.
-            tmp2 = float(".{}".format(match2.group(4)))
-            obj.eccentricity = tmp2
+        # Transcript argument of perigee.
+        tmp2 = AziAngle(deg=float(match2.group(5)))
+        obj.argument_of_perigee = tmp2
 
-            # Transcript argument of perigee.
-            tmp2 = AziAngle(deg=float(match2.group(5)))
-            obj.argument_of_perigee = tmp2
+        # Transcript mean anomaly.
+        tmp2 = AziAngle(deg=float(match2.group(6)))
+        obj.mean_anomaly = tmp2
 
-            # Transcript mean anomaly.
-            tmp2 = AziAngle(deg=float(match2.group(6)))
-            obj.mean_anomaly = tmp2
+        # Transcript mean motion.
+        tmp2 = float(match2.group(7))
+        obj.mean_motion = tmp2
 
-            # Transcript mean motion.
-            tmp2 = float(match2.group(7))
-            obj.mean_motion = tmp2
+        # Transcript revolution number at epoch.
+        tmp2 = int(match2.group(8))
+        obj._epoch_revolution_number = tmp2
 
-            # Transcript revolution number at epoch.
-            tmp2 = int(match2.group(8))
-            obj._epoch_revolution_number = tmp2
-
-            # Return the Ephemeris instance.
-            return obj
-
-        except EphemerisError as err:
-            err.__cause__ = None
-            print(err)
+        # Return the Ephemeris instance.
+        return obj
 
     def to_copy(self):
         """Return a deep copy of the Ephemeris instance."""

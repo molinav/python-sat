@@ -1,18 +1,18 @@
 from __future__ import division
-from . _constants.Angle import DEG
-from . _constants.Angle import GRD
-from . _constants.Angle import RAD
-from . _constants.Angle import REV
-from . _constants.Angle import DEG2RAD
-from . _constants.Angle import GRD2RAD
-from . _constants.Angle import RAD2RAD
-from . _constants.Angle import REV2RAD
-from . _constants.Angle import DEFAULT_ANGLE_VALUE
-from . _constants.Angle import INFINITY
-from . _constants.Angle import PI
-from . _decorators import accepts
-from . _decorators import limits
-from . _decorators import returns
+from . constants.Angle import DEG
+from . constants.Angle import GRD
+from . constants.Angle import RAD
+from . constants.Angle import REV
+from . constants.Angle import DEG2RAD
+from . constants.Angle import GRD2RAD
+from . constants.Angle import RAD2RAD
+from . constants.Angle import REV2RAD
+from . constants.Angle import DEFAULT_ANGLE_VALUE
+from . constants.Angle import INFINITY
+from . constants.Angle import PI
+from . decorators import accepts
+from . decorators import limits
+from . decorators import returns
 from numbers import Real
 
 

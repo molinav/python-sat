@@ -1,17 +1,17 @@
 from __future__ import division
-from . _constants.Angle import REV2RAD
-from . _constants.Orbit import DAY2SEC
-from . _constants.Orbit import EARTH_ANGULAR_SPEED
-from . _constants.Orbit import EARTH_FLATTENING_FACTOR
-from . _constants.Orbit import EARTH_SEMIMAJOR_AXIS
-from . _constants.Orbit import ECCENTRIC_ANOMALY_TOLERANCE
-from . _constants.Orbit import GEODETIC_COORDINATES_TOLERANCE
-from . _constants.Orbit import SECOND_ZONAL_TERM_J2
-from . _constants.Orbit import STANDARD_GRAVITATIONAL_PARAMETER
-from . _decorators import accepts
-from . _decorators import returns
-from . _errors.Orbit import OrbitError
+from . constants.Angle import REV2RAD
+from . constants.Orbit import DAY2SEC
+from . constants.Orbit import EARTH_ANGULAR_SPEED
+from . constants.Orbit import EARTH_FLATTENING_FACTOR
+from . constants.Orbit import EARTH_SEMIMAJOR_AXIS
+from . constants.Orbit import ECCENTRIC_ANOMALY_TOLERANCE
+from . constants.Orbit import GEODETIC_COORDINATES_TOLERANCE
+from . constants.Orbit import SECOND_ZONAL_TERM_J2
+from . constants.Orbit import STANDARD_GRAVITATIONAL_PARAMETER
+from . decorators import accepts
+from . decorators import returns
 from . Ephemeris import Ephemeris
+from . Error import OrbitError
 import numpy as np
 
 
@@ -46,9 +46,7 @@ class Orbit(object):
             self._ephemeris = ephemeris.to_copy()
         else:
             msg = "Ephemeris instance is not complete"
-            err = OrbitError(msg)
-            print(err)
-            exit()
+            raise OrbitError(msg)
 
     @accepts(np.ndarray)
     def compute(self, datetime):
@@ -84,8 +82,8 @@ class Orbit(object):
         except (TypeError, ValueError):
             msg = "Invalid array for input time"
             err = OrbitError(msg)
-            print(err)
-            exit()
+            err.__cause__ = None
+            raise err
 
     @classmethod
     def _calc_timedelta(cls, obj):
@@ -101,8 +99,8 @@ class Orbit(object):
         except TypeError:
             msg = "Ephemeris attribute from Orbit instance is not complete"
             err = OrbitError(msg)
-            print(err)
-            exit()
+            err.__cause__ = None
+            raise err
 
     @classmethod
     def _calc_mean_motion(cls, obj):

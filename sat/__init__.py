@@ -2,6 +2,7 @@
 
 from . import Angle
 from . import Ephemeris
+from . import Error
 from . import filepath
 from . import Orbit
 

@@ -1,9 +1,9 @@
-from .. _constants.Filepath import PATTERN_FILEPATH_SATELLITE_NAME
-from .. _constants.Filepath import PATTERN_FILEPATH_PRODUCT
-from .. _decorators import accepts
-from .. _decorators import pattern
-from .. _decorators import returns
-from .. _errors.Filepath import FilepathError
+from .. constants.Filepath import PATTERN_FILEPATH_SATELLITE_NAME
+from .. constants.Filepath import PATTERN_FILEPATH_PRODUCT
+from .. decorators import accepts
+from .. decorators import pattern
+from .. decorators import returns
+from .. Error import FilepathError
 from datetime import datetime
 from six import text_type
 

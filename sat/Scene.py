@@ -1,15 +1,15 @@
 from __future__ import division
-from . _constants.Scene import DATASET_COORDINATE_TOLERANCE
-from . _constants.Scene import DATASET_DRIVER
-from . _constants.Scene import DATE_PATTERN
-from . _constants.Scene import DEFAULT_SCAN_STEP_ANGLE
-from . _constants.Orbit import EARTH_FLATTENING_FACTOR
-from . _constants.Orbit import EARTH_SEMIMAJOR_AXIS
-from . _decorators import accepts
-from . _decorators import returns
-from . _errors.Scene import SceneError
+from . constants.Scene import DATASET_COORDINATE_TOLERANCE
+from . constants.Scene import DATASET_DRIVER
+from . constants.Scene import DATE_PATTERN
+from . constants.Scene import DEFAULT_SCAN_STEP_ANGLE
+from . constants.Orbit import EARTH_FLATTENING_FACTOR
+from . constants.Orbit import EARTH_SEMIMAJOR_AXIS
+from . decorators import accepts
+from . decorators import returns
 from . Angle import Angle
 from . Ephemeris import Ephemeris
+from . Error import SceneError
 from . Orbit import Orbit
 from datetime import datetime
 from datetime import timedelta
@@ -42,14 +42,10 @@ class Scene(object):
         dataset = Open(path)
         if not dataset:
             msg = "Invalid path for image file"
-            err = SceneError(msg)
-            print(err)
-            exit()
+            raise SceneError(msg)
         if dataset.GetDriver().LongName != DATASET_DRIVER:
             msg = "Image file must be a {}".format(DATASET_DRIVER)
-            err = SceneError(msg)
-            print(err)
-            exit()
+            raise SceneError(msg)
         for item in self.__slots__:
             self.__setattr__(item, None)
         # Build Orbit instance from list of TLE lines.
@@ -76,17 +72,13 @@ class Scene(object):
                     "Insufficient across-track point density",
                     xsize // 4,
                     x_density)
-                err = SceneError(msg)
-                print(err)
-                exit()
+                raise SceneError(msg)
             if y_density > (ysize // 10):
                 msg = "{} (minimum {}, found {})".format(
                     "Insufficient along-track point density",
                     ysize // 4,
                     y_density)
-                err = SceneError(msg)
-                print(err)
-                exit()
+                raise SceneError(msg)
             # Set point spacing.
             xran = np.arange((xsize // 2) % x_density, xsize, x_density)
             yran = np.arange((ysize // 2) % y_density, ysize, y_density)
@@ -100,8 +92,8 @@ class Scene(object):
             parent = self.__class__.__name__
             msg = "{} attributes are not complete".format(parent)
             err = SceneError(msg)
-            print(err)
-            exit()
+            err.__cause__ = None
+            raise err
         # Call necessary constants.
         ae = EARTH_SEMIMAJOR_AXIS
         be = ae * np.sqrt(1 - EARTH_FLATTENING_FACTOR)
@@ -220,8 +212,8 @@ class Scene(object):
             except KeyError:
                 msg = "Scene dataset does not contain end datetime"
                 err = SceneError(msg)
-                print(err)
-                exit()
+                err.__cause__ = None
+                raise err
         return self._end_datetime
 
     @property
@@ -278,6 +270,6 @@ class Scene(object):
             except KeyError:
                 msg = "Scene dataset does not contain start datetime"
                 err = SceneError(msg)
-                print(err)
-                exit()
+                err.__cause__ = None
+                raise err
         return self._start_datetime
