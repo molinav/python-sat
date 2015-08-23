@@ -10,7 +10,9 @@ Prerequisites
 It is needed at least:
 
 * Python 2.6+, 3.2+
+* gdal 1.11+
 * numpy 1.7+
+* scipy 0.15+
 * six for Python 2/3 compatibility
 
 Installation
