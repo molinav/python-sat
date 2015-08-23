@@ -127,7 +127,7 @@ class Scene(object):
         r_vec = self.orbit.position_ecf
         u_orb = self._compute_spacecraft_fixed_unit_look_vectors()
         w_xyz = self._compute_spacecraft_geodetic_unit_vectors()
-        # Set attitude angles to 0 radians.
+        # Read attitude angles and build rotation array.
         roll, pitch, yaw = self.spacecraft_attitude
         rot_a = np.array([[1, pitch, -roll], [-pitch, 1, yaw], [roll, -yaw, 1]])
         # Create temporary arrays where ECF and geodetic coordinates will be
@@ -174,7 +174,7 @@ class Scene(object):
         self._position_geo = tmp_geo
         self._position_pix = tmp_pix
 
-    def _calc_hrpt(self, slices=500, buffer=250, fill_value=-999):
+    def build_geographic_window(self, slices=400, buffer=100, fill_value=-999):
         """Calc geodetic coordinates for all the hrpt image and build
         geodetic grid for pixel indices and its geotransform."""
 
@@ -211,13 +211,13 @@ class Scene(object):
             """Inner function where self._hrpt_geo is computed."""
 
             # Call necessary properties.
-            ygcps = self.gcp_yrange
-            xgcps = self.gcp_xrange
-            ggcps = self.position_geo[:, :2] / DEG2RAD
-            ggcps = np.rollaxis(ggcps.reshape((len(ygcps), len(xgcps), 2)), 2)
+            ynum = self.gcp_yrange
+            xnum = self.gcp_xrange
+            gcps = self.position_geo[:, :2] / DEG2RAD
+            gcps = np.rollaxis(gcps.reshape((len(ynum), len(xnum), 2)), 2)
             # Compute latitude and longitude interpolators.
-            lat_spl = RectBivariateSpline(x=ygcps, y=xgcps, z=ggcps[0])
-            lon_spl = RectBivariateSpline(x=ygcps, y=xgcps, z=ggcps[1])
+            lat_spl = RectBivariateSpline(x=ynum, y=xnum, z=gcps[0])
+            lon_spl = RectBivariateSpline(x=ynum, y=xnum, z=gcps[1])
             # Compute latitude and longitude for all the pixels.
             latlon = np.asarray([f(ystep, xstep) for f in [lat_spl, lon_spl]])
             height = np.zeros((1,) + latlon.shape[1:])
