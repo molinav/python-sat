@@ -24,6 +24,7 @@ setup(
     install_requires=[
         "gdal",
         "numpy",
+        "scipy",
         "six",
         ],
     )

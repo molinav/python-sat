@@ -16,5 +16,15 @@ DATE_PATTERN = text_type(
     "^year: (\d{4}), day: (\d{1,3}), millisecond: (\d{1,8})$")
 
 # Default scan step angle for AVHRR sensor in degrees.
-DEFAULT_SCAN_STEP_ANGLE =\
-    0.0539
+DEFAULT_SCAN_STEP_LOOK_ANGLE =\
+    0.053875
+
+# Margin value when obtaining the border mask of a gridded indices array.
+HPRT_BORDER_MASK_MARGIN =\
+    200
+
+# Default steps when georeferencing and HRPT image into geographic coordinates.
+HRPT_LATITUDE_STEP =\
+    -0.01
+HRPT_LONGITUDE_STEP =\
+    +0.01
