@@ -80,6 +80,7 @@ class Orbit(object):
     @classmethod
     def _add_datetime(cls, obj, date):
         """Safe setter for datetime attribute."""
+
         try:
             obj._datetime = np.asarray([
                 x.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -209,14 +210,14 @@ class Orbit(object):
         dtm1 = dtm1[:, None] / 36525
         # Compute UTC time for the datetime of interest.
         dtm2 = ((obj.datetime - t2) / np.timedelta64(1, "D")).astype(float)
-        dtm2 = dtm2[:, None]
-        dtm2 = ((dtm2 % dtm2.astype(int)) * 86400)
+        dtm2 = ((dtm2 % dtm2.astype(int)) * 86400)[:, None]
         # Compute the Greenwich Sidereal Time (GST), that is, the angle
         # between the vernal point and the Greenwich meridian (which is
         # also the angle between the ECI and ECEF reference systems).
         c0, c1, c2, c3 = [24110.54841, 8640184.812866, 0.093104, -6.2e-6]
         gst0 = c0 + c1 * dtm1 + c2 * dtm1**2 + c3 * dtm1**3
         gst = (gst0/86400 * 2*np.pi) + we * dtm2 / 1.00278
+
         return gst
 
     @classmethod
