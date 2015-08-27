@@ -1,7 +1,9 @@
 from __future__ import division
+from __future__ import print_function
 from . constants.Angle import DEG2RAD
 from . constants.Orbit import EARTH_FLATTENING_FACTOR
 from . constants.Orbit import EARTH_SEMIMAJOR_AXIS
+from . constants.Orbit import GEODETIC_COORDINATES_TOLERANCE
 from . constants.Scene import DATASET_COORDINATE_TOLERANCE
 from . constants.Scene import DATASET_DRIVER
 from . constants.Scene import DATE_PATTERN
@@ -9,6 +11,9 @@ from . constants.Scene import DEFAULT_SCAN_STEP_LOOK_ANGLE
 from . constants.Scene import HPRT_BORDER_MASK_MARGIN
 from . constants.Scene import HRPT_LATITUDE_STEP
 from . constants.Scene import HRPT_LONGITUDE_STEP
+from . constants.Scene import HRPT_CLOUD_THRESHOLD_B5
+from . constants.Scene import SPACECRAFT_ASCENDING
+from . constants.Scene import SPACECRAFT_DESCENDING
 from . decorators import accepts
 from . decorators import returns
 from . Angle import Angle
@@ -17,8 +22,6 @@ from . Error import SceneError
 from . Orbit import Orbit
 from datetime import datetime
 from datetime import timedelta
-from gdal import Dataset
-from gdal import Open
 from scipy.interpolate import griddata
 from scipy.interpolate import NearestNDInterpolator
 from scipy.interpolate import RectBivariateSpline
@@ -26,6 +29,7 @@ from scipy.ndimage import binary_dilation
 from scipy.ndimage import binary_erosion
 from scipy.sparse import coo_matrix
 from six import text_type
+import gdal
 import numpy as np
 import re
 
@@ -34,16 +38,19 @@ class Scene(object):
 
     __slots__ = [
         "_dataset",
+        "_clock_drift",
         "_end_datetime",
+        "_gcp_position_ecf",
+        "_gcp_position_geo",
+        "_gcp_position_pix",
         "_gcp_xrange",
         "_gcp_yrange",
         "_hrpt_geo",
+        "_hrpt_img",
+        "_hrpt_msk",
         "_hrpt_gtr",
         "_hrpt_pix",
         "_orbit",
-        "_position_ecf",
-        "_position_geo",
-        "_position_pix",
         "_scan_step_look_angle",
         "_scan_timedelta",
         "_scan_xsize",
@@ -69,7 +76,8 @@ class Scene(object):
         """
 
         # Check that the dataset is valid.
-        dataset = Open(path)
+        gdal.PushErrorHandler("CPLQuietErrorHandler")
+        dataset = gdal.Open(path)
         if not dataset:
             msg = "Invalid path for image file"
             raise SceneError(msg)
@@ -86,7 +94,15 @@ class Scene(object):
 
     @accepts(int, int)
     def compute(self, x_density, y_density):
-        """Compute scene coordinates for corresponding datetime."""
+        """Compute scene coordinates for corresponding datetime.
+
+        Parameters:
+
+        x_density
+            x spacing between ground control points
+        y_density
+            y spacing between ground control points
+        """
 
         # Proceed only if the Scene instance's attributes are well-defined.
         try:
@@ -105,13 +121,17 @@ class Scene(object):
                 raise SceneError(msg)
             # Set control point indices.
             self._gcp_xrange = np.arange(
-                (self.scan_xsize // 2) % x_density, self.scan_xsize, x_density)
+                0.5 + (self.scan_xsize // 2) % x_density,
+                self.scan_xsize,
+                x_density)
             self._gcp_yrange = np.arange(
-                (self.scan_ysize // 2) % y_density, self.scan_ysize, y_density)
+                0.5 + (self.scan_ysize // 2) % y_density,
+                self.scan_ysize,
+                y_density)
             # Compute expected datetimes for every scan line and propagate
             # attributes from Orbit property.
             times = np.asarray([
-                self.start_datetime + n * self.scan_timedelta
+                self.start_datetime + self.clock_drift + n * self.scan_timedelta
                 for n in range(self.scan_ysize)])[:, None]
             self.orbit.compute(times)
         except AttributeError:
@@ -134,12 +154,13 @@ class Scene(object):
         # stored during the computation.
         xnum = len(self.gcp_xrange)
         ynum = len(self.gcp_yrange)
+        xran = self.gcp_xrange.astype(int)
         tmp_ecf = np.empty((xnum*ynum, 3))
         tmp_geo = np.empty((xnum*ynum, 3))
         tmp_pix = np.empty((xnum*ynum, 2))
         for i, j in enumerate(self.gcp_yrange):
             rot_t = w_xyz[:, :, j]
-            u_xyz = np.dot(np.dot(rot_t.T, rot_a.T), u_orb[:, self.gcp_xrange])
+            u_xyz = np.dot(np.dot(rot_t.T, rot_a.T), u_orb[:, xran])
             # Estimate recursively the ECF coordinates for every image's pixel.
             r_vec_ii = r_vec[j][:, None]
             pix_norm = ae
@@ -152,10 +173,10 @@ class Scene(object):
                 d_norm = - dotru - np.sqrt(pix_norm**2 - sat_norm**2 + dotru**2)
                 pix_vec_ii = d_norm * u_xyz + r_vec_ii
                 # Update image position coordinates.
-                self._position_ecf = pix_vec_ii.T
+                self._gcp_position_ecf = pix_vec_ii.T
                 self._calc_coordinates_from_ecf_to_geo()
                 # Compute new norm for pixel vectors.
-                lat = self.position_geo[:, 0]
+                lat = self.gcp_position_geo[:, 0]
                 pix_norm2 = np.sqrt(
                     ((ae**2 * np.cos(lat))**2 + (be**2 * np.sin(lat))**2) /
                     ((ae * np.cos(lat))**2 + (be * np.sin(lat))**2))
@@ -163,20 +184,28 @@ class Scene(object):
                 dif = (pix_norm2 - pix_norm)**2
                 pix_norm = pix_norm2
             # Grow temporary variables which store ECF and geodetic coordinates.
-            tmp_ecf[i*xnum:(i+1)*xnum, :] = self.position_ecf
-            tmp_geo[i*xnum:(i+1)*xnum, :] = self.position_geo
+            tmp_ecf[i*xnum:(i+1)*xnum, :] = self.gcp_position_ecf
+            tmp_geo[i*xnum:(i+1)*xnum, :] = self.gcp_position_geo
             tmp_pix[i*xnum:(i+1)*xnum, :] = np.asarray([
-                j * np.ones((self.scan_xsize,))[self.gcp_xrange] - 0.5,
-                self.gcp_xrange + 0.5,
-                ]).T
+                j * np.ones((xnum,)), self.gcp_xrange]).T
         # Update ECF and geodetic coordinates.
-        self._position_ecf = tmp_ecf
-        self._position_geo = tmp_geo
-        self._position_pix = tmp_pix
+        self._gcp_position_ecf = tmp_ecf
+        self._gcp_position_geo = tmp_geo
+        self._gcp_position_pix = tmp_pix
 
     def build_geographic_window(self, slices=400, buffer=100, fill_value=-999):
         """Calc geodetic coordinates for all the hrpt image and build
-        geodetic grid for pixel indices and its geotransform."""
+        geodetic grid for pixel indices and its geotransform.
+
+        Optional parameters:
+
+        slices
+            number of rows in which the method is split (default 400)
+        buffer
+            number of overlapping rows between two slices (default 100)
+        fill_value
+            no data value (default -999)
+        """
 
         # Verify the types and ranges of all the input arguments.
         if not isinstance(slices, int):
@@ -200,8 +229,8 @@ class Scene(object):
         print(msg.format(self.__class__.__name__, id(self)))
 
         # Call necessary properties.
-        xstep = np.arange(self.scan_xsize)
-        ystep = np.arange(self.scan_ysize)
+        xstep = 0.5 + np.arange(self.scan_xsize)
+        ystep = 0.5 + np.arange(self.scan_ysize)
 
         # Show info message.
         msg = "\n  Calculating geodetic coordinates for all the HRPT pixels"
@@ -211,13 +240,13 @@ class Scene(object):
             """Inner function where self._hrpt_geo is computed."""
 
             # Call necessary properties.
-            ynum = self.gcp_yrange
-            xnum = self.gcp_xrange
-            gcps = self.position_geo[:, :2] / DEG2RAD
-            gcps = np.rollaxis(gcps.reshape((len(ynum), len(xnum), 2)), 2)
+            yran = self.gcp_yrange
+            xran = self.gcp_xrange
+            gcps = self.gcp_position_geo[:, :2] / DEG2RAD
+            gcps = np.rollaxis(gcps.reshape((len(yran), len(xran), 2)), 2)
             # Compute latitude and longitude interpolators.
-            lat_spl = RectBivariateSpline(x=ynum, y=xnum, z=gcps[0])
-            lon_spl = RectBivariateSpline(x=ynum, y=xnum, z=gcps[1])
+            lat_spl = RectBivariateSpline(x=yran, y=xran, z=gcps[0])
+            lon_spl = RectBivariateSpline(x=yran, y=xran, z=gcps[1])
             # Compute latitude and longitude for all the pixels.
             latlon = np.asarray([f(ystep, xstep) for f in [lat_spl, lon_spl]])
             height = np.zeros((1,) + latlon.shape[1:])
@@ -232,31 +261,31 @@ class Scene(object):
         msg = "\n  Calculating geotransform for gridded HRPT indices image"
         print(msg)
 
-        def calc_geotransform():
+        def calc_hrpt_gtr():
             """Inner function where self._hrpt_gtr is computed."""
 
             # Compute geotransform parameters.
             prj_st = np.asarray([HRPT_LATITUDE_STEP, HRPT_LONGITUDE_STEP])
-            prj_nw = np.asarray([raw_ymax, raw_xmin])
+            prj_nw = np.asarray([raw_ymax, raw_xmin]) - 0.5 * prj_st
             prj_se = np.asarray([raw_ymin, raw_xmax]) + 0.5 * prj_st
-            prj_sz = ((prj_se - prj_nw) // prj_st).astype(int)
-            self._hrpt_gtr = (raw_xmin, prj_st[1], 0, raw_ymax, 0, prj_st[0])
+            prj_sz = np.round((prj_se - prj_nw) / prj_st).astype(int)
+            self._hrpt_gtr = (prj_nw[1], prj_st[1], 0, prj_nw[0], 0, prj_st[0])
             # Compute pixel indices in the new grid.
-            prj_nw3 = prj_nw[:, None, None]
             prj_st3 = prj_st[:, None, None]
-            prj_rowcol = np.round((self.hrpt_geo[:2]/DEG2RAD - prj_nw3)/prj_st3)
+            prj_nw3 = prj_nw[:, None, None]
+            prj_rowcol = (self.hrpt_geo[:2]/DEG2RAD - prj_nw3) // prj_st3
 
             return prj_sz, prj_rowcol
 
         # Compute geotransform for the new grid.
-        prj_sz, prj_rowcol = calc_geotransform()
+        prj_sz, prj_rowcol = calc_hrpt_gtr()
 
         # Show info message.
         msg = "\n  Calculating gridded HRPT border mask"
         print(msg)
 
         def calc_border_mask():
-            """Inner function where gridded border mask is obtained"""
+            """Inner function where gridded border mask is obtained."""
 
             margin = HPRT_BORDER_MASK_MARGIN
             iter_n = int(margin//2)
@@ -269,14 +298,14 @@ class Scene(object):
             kern = np.ones((3, 3), dtype=bool)
             # Dilate and erode test array to fill holes.
             test = binary_dilation(test, structure=kern, iterations=iter_n)
-            test = binary_erosion(test, structure=kern, iterations=iter_n)
-            return np.logical_not(test[margin:-margin, margin:-margin])
+            test = binary_erosion(test, structure=kern, iterations=iter_n+2)
+            return np.logical_not(test[None, margin:-margin, margin:-margin])
 
         # Set pixels within border mask to fill value.
-        mask = calc_border_mask()
+        border_mask = calc_border_mask()
 
         # Show info message.
-        msg = "\n  Calculating gridded HRPT indices image"
+        msg = "\n  Calculating gridded HRPT indices"
         print(msg)
 
         def calc_hrpt_pts():
@@ -295,15 +324,15 @@ class Scene(object):
         # also pixels to be evaluated as vv.
         xx, yy, vv = calc_hrpt_pts()
 
-        def calc_hrpt_pix_legacy():
+        def calc_hrpt_pix_legacy1():
             """Legacy inner function where self._hrpt_pix is computed."""
 
             func = NearestNDInterpolator(xx, yy)
             temp = func(vv).reshape((prj_sz[0], prj_sz[1], 2))
             self._hrpt_pix = np.rollaxis(temp, 2)
-            self._hrpt_pix[:, mask] = fill_value
+            self._hrpt_pix[border_mask] = fill_value
 
-        def calc_hrpt_pix():
+        def calc_hrpt_pix_legacy2():
             """Inner function where self._hrpt_pix is computed."""
 
             # Prepare info message for loop.
@@ -311,7 +340,7 @@ class Scene(object):
             msg2 = "\n    rows {1:{0}d} - {2:{0}d} out of {3}"
 
             # For every slice project the pixel indices.
-            self._hrpt_pix = np.empty((2, prj_sz[0], prj_sz[1]), dtype=np.int16)
+            temp = np.empty((2, prj_sz[0], prj_sz[1]), dtype=np.int16)
 
             for lim1 in range(0, prj_sz[0], slices):
 
@@ -328,14 +357,83 @@ class Scene(object):
 
                 # Convert to gridded data.
                 size = (lim2-lim1, prj_sz[1], 2)
-                temp = np.rollaxis(
+                temp[:, lim1:lim2] = np.rollaxis(
                     griddata(xx_n, yy_n, vv_n, method="nearest",
                              fill_value=fill_value,).reshape(size), 2)
-                self._hrpt_pix[:, lim1:lim2] = temp
-            self._hrpt_pix[:, mask] = fill_value
+            self._hrpt_pix = temp
+            self._hrpt_pix[border_mask] = fill_value
+
+        def calc_hrpt_pix():
+
+            from scipy import ndimage as nd
+
+            # Arrange test array.
+            row, col = xx.T
+            ones_array = np.ones((yy.shape[0],), dtype=int)
+            test_array = np.asarray([
+                coo_matrix((val, (row, col)), shape=prj_sz).toarray()
+                for val in [yy[:, 0], yy[:, 1], ones_array]])
+
+            # Divide array of indices by the array of weights.
+            mass = np.where(test_array[2], test_array[2], 1)
+            data = (test_array[:2] // mass).astype(np.int16)
+
+            # Do mask computation.
+            mask = (data == 0)
+            data -= 1
+            data[mask] = -100
+            data[:, border_mask[0]] = -999
+
+            # Store array of indices in self._hrpt_pix.
+            indices = nd.distance_transform_edt(
+                mask & np.logical_not(border_mask),
+                return_distances=False,
+                return_indices=True)
+            self._hrpt_pix = data[tuple(indices)]
 
         # Calculate HRPT indices image.
         calc_hrpt_pix()
+
+        # Show info message.
+        msg = "\n  Calculating gridded HRPT bands"
+        print(msg)
+
+        def calc_hrpt_img():
+            """Inner function where self._hrpt_img is computed"""
+
+            # Extract HRPT bands from GDAL Dataset instance.
+            bnd_raw = np.vstack([
+                self.dataset.GetRasterBand(i+1).ReadAsArray(
+                    0, 0, self.scan_xsize, self.scan_ysize)[None, :]
+                for i in range(self.dataset.RasterCount)])
+
+            # Assign digital-numbers using the indices array.
+            idx = self.hrpt_pix
+            bnd_geo = np.zeros((len(bnd_raw),) + idx.shape[1:], dtype=np.int16)
+            for i in range(idx.shape[1]):
+                for j in range(idx.shape[2]):
+                    row, col = idx[:, i, j]
+                    if row != fill_value and col != fill_value:
+                        bnd_geo[:, i, j] = bnd_raw[:, row, col]
+            self._hrpt_img = bnd_geo
+
+        # Calculate HRPT 5-band digital-number image.
+        calc_hrpt_img()
+
+        # Show info message.
+        msg = "\n  Calculating gridded HRPT masks"
+        print(msg)
+
+        def calc_hrpt_msk():
+            """Inner function where self._hrpt_msk is computed"""
+
+            # Set thermal evaluator (channel 5).
+            cld = self.hrpt_img[4] >= HRPT_CLOUD_THRESHOLD_B5
+
+            self._hrpt_msk = 255 * cld[None, :].astype(np.uint8)
+
+        # Calculate HRPT cloud mask.
+        calc_hrpt_msk()
 
         # Show info message.
         msg = "\n  HRPT indices were successfully gridded with shape {}"
@@ -343,7 +441,53 @@ class Scene(object):
 
     def _calc_coordinates_from_ecf_to_geo(self):
         """Compute geodetic coordinates for a specific datetime."""
-        Orbit._calc_coordinates_from_ecf_to_geo(self)
+
+        # Call necessary constants.
+        ae = EARTH_SEMIMAJOR_AXIS
+        e2 = EARTH_FLATTENING_FACTOR
+        # Call necessary properties.
+        rx_s, ry_s, rz_s = [x[:, None] for x in self.gcp_position_ecf.T]
+        p_factor = np.sqrt(rx_s**2 + ry_s**2)
+
+        def _estimate_n_factor(latitude):
+            return ae / np.sqrt(1 - e2 * np.sin(latitude)**2)
+
+        def _estimate_height(n_factor, latitude):
+            return p_factor / np.cos(latitude) - n_factor
+
+        def _estimate_latitude(n_factor, altitude):
+            sin_lat = rz_s / (n_factor*(1-e2) + altitude)
+            return np.arctan((rz_s + e2*n_factor*sin_lat)/p_factor)
+
+        def _estimate_longitude():
+            return np.arctan2(ry_s, rx_s)
+
+        # Estimate recursively the values of altitude and latitude.
+        n_factor_old = ae
+        alt_old = 0
+        lat_old = _estimate_latitude(n_factor_old, alt_old)
+        dif = np.asarray([1])
+        # Repeat recursive method until a tolerance is reached.
+        while (dif > 0).all():
+            n_factor_new = np.where(
+                dif > 0, _estimate_n_factor(lat_old), n_factor_old)
+            alt_new = np.where(
+                dif > 0, _estimate_height(n_factor_new, lat_old), alt_old)
+            lat_new = np.where(
+                dif > 0, _estimate_latitude(n_factor_new, alt_new), lat_old)
+            dif1 = np.abs(alt_new - alt_old)
+            dif2 = np.abs(lat_new - lat_old)
+            dif = dif1 + dif2 - GEODETIC_COORDINATES_TOLERANCE
+            # Overwrite old temporary variables with new values.
+            n_factor_old = n_factor_new
+            alt_old = alt_new
+            lat_old = lat_new
+        # Compute longitude for a specific time.
+        alt = alt_old
+        lat = lat_old
+        lon = _estimate_longitude()
+        # Set geodetic satellite position property.
+        self._gcp_position_geo = np.hstack([lat, lon, alt])
 
     def _compute_spacecraft_fixed_unit_look_vectors(self):
         """Return unit look vectors in spacecraft-fixed coordinates."""
@@ -387,9 +531,17 @@ class Scene(object):
             raise ValueError(msg)
 
     @property
-    @returns(Dataset)
+    @returns(timedelta)
+    def clock_drift(self):
+        """on board clock variation"""
+        if self._clock_drift is None:
+            self._clock_drift = timedelta(seconds=0)
+        return self._clock_drift
+
+    @property
+    @returns(gdal.Dataset)
     def dataset(self):
-        """dataset containing the image"""
+        """GDAL dataset containing the image"""
         return self._dataset
 
     @property
@@ -427,38 +579,52 @@ class Scene(object):
         return self._hrpt_geo
 
     @property
+    @returns(np.ndarray)
+    def hrpt_img(self):
+        """HRPT image in gridded window"""
+        return self._hrpt_img
+
+    @property
+    @returns(np.ndarray)
+    def hrpt_msk(self):
+        """HRPT cloud mask in gridded window"""
+        return self._hrpt_msk
+
+    @property
     @returns(tuple)
     def hrpt_gtr(self):
-        """geotransform for gridded image of HRPT indices"""
+        """geotransform for HRPT gridded window"""
         return self._hrpt_gtr
 
     @property
+    @returns(np.ndarray)
     def hrpt_pix(self):
         """gridded image of HRPT indices"""
         return self._hrpt_pix
 
     @property
+    @returns(Orbit)
     def orbit(self):
         """Orbit instance for the associated Earth satellite"""
         return self._orbit
 
     @property
     @returns(np.ndarray)
-    def position_ecf(self):
-        """dataset position in ECF reference system"""
-        return self._position_ecf
+    def gcp_position_ecf(self):
+        """dataset gcp position in ECF reference system"""
+        return self._gcp_position_ecf
 
     @property
     @returns(np.ndarray)
-    def position_geo(self):
-        """dataset position in geodetic reference system"""
-        return self._position_geo
+    def gcp_position_geo(self):
+        """dataset gcp position in geodetic reference system"""
+        return self._gcp_position_geo
 
     @property
     @returns(np.ndarray)
-    def position_pix(self):
-        """dataset position in pixel (row, col) reference system"""
-        return self._position_pix
+    def gcp_position_pix(self):
+        """dataset gcp position in pixel (row, col) reference system"""
+        return self._gcp_position_pix
 
     @property
     @returns(timedelta)
@@ -510,7 +676,10 @@ class Scene(object):
         """spacecraft direction (+1 ascending, -1 descending)"""
         if self._spacecraft_direction is None:
             direction = self.dataset.GetMetadata()["LOCATION"].lower()
-            self._spacecraft_direction = - 1 + 2 * int(direction == "ascending")
+            if direction == "ascending":
+                self._spacecraft_direction = SPACECRAFT_ASCENDING
+            else:
+                self._spacecraft_direction = SPACECRAFT_DESCENDING
         return self._spacecraft_direction
 
     @property
@@ -523,7 +692,7 @@ class Scene(object):
             dstep = self.scan_step_look_angle.rad
             xsize = self.scan_xsize
             # Compute look angles.
-            dlook = -((xsize//2 - np.arange(xsize)[None, :]) * dstep)
+            dlook = -((xsize//2 - 0.5 - np.arange(xsize)[None, :]) * dstep)
             self._spacecraft_fixed_look_angle = dlook
         return self._spacecraft_fixed_look_angle
 
