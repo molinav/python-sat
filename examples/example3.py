@@ -51,7 +51,8 @@ for case in ["day", "night"]:
     # and 23 pixels in y-direction (along-track).
     scen.compute(40, 23)
     trajectory = FACTOR * scen.orbit.position_geo
-    coordtable = np.hstack([FACTOR * scen.position_geo, scen.position_pix])
+    coordtable = np.hstack(
+        [FACTOR * scen.gcp_position_geo, scen.gcp_position_pix])
 
     # Export trajectory and calculated GCPs grid into CSV files.
     # Header: (y, x, z)=(latitude, longitude, altitude), (r, c)=(row, column).
