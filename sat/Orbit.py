@@ -1,11 +1,11 @@
 from __future__ import division
 from . constants.Angle import REV2RAD
+from . constants.Coordinates import EARTH_FLATTENING_FACTOR
+from . constants.Coordinates import EARTH_SEMIMAJOR_AXIS
+from . constants.Coordinates import GEODETIC_COORDINATES_TOLERANCE
 from . constants.Orbit import DAY2SEC
 from . constants.Orbit import EARTH_ANGULAR_SPEED
-from . constants.Orbit import EARTH_FLATTENING_FACTOR
-from . constants.Orbit import EARTH_SEMIMAJOR_AXIS
 from . constants.Orbit import ECCENTRIC_ANOMALY_TOLERANCE
-from . constants.Orbit import GEODETIC_COORDINATES_TOLERANCE
 from . constants.Orbit import SECOND_ZONAL_TERM_J2
 from . constants.Orbit import STANDARD_GRAVITATIONAL_PARAMETER
 from . decorators import accepts

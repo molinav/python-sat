@@ -13,18 +13,6 @@ ECCENTRIC_ANOMALY_TOLERANCE =\
 EARTH_ANGULAR_SPEED =\
     7.2921150e-5
 
-# Earth's constants related to WGS84 ellipsoid (SI units).
-EARTH_FLATTENING_VALUE =\
-    1/298.257223563
-EARTH_FLATTENING_FACTOR =\
-    EARTH_FLATTENING_VALUE * (2 - EARTH_FLATTENING_VALUE)
-EARTH_SEMIMAJOR_AXIS =\
-    6378137
-
-# Coordinate tolerance for geodetic calculations.
-GEODETIC_COORDINATES_TOLERANCE =\
-    1e-9
-
 # Coefficient for the second zonal term, related to the oblateness of the
 # Earth, expressed in m^5 per s^2.
 SECOND_ZONAL_TERM_J2 =\
