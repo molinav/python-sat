@@ -1,5 +1,6 @@
 from __future__ import division
 from . constants.Angle import DEG2RAD
+from . constants.Matcher import MAX_ATTITUDE_ANGLE
 from . constants.Matcher import MAX_DISTANCE
 from . constants.Matcher import MAX_HAMMING
 from . constants.Scene import HRPT_CLOUD_THRESHOLD_B5
@@ -206,11 +207,10 @@ class Matcher(object):
                 y_angle = (g3*h1 - g2*h3) / (g1*g3 - g2*g2)
                 attitude = np.asarray([r_angle, p_angle, y_angle])
                 # Check the values are within the valid range.
-                flag = np.any(np.abs(attitude) > 0.02)
+                flag = np.any(np.abs(attitude) > MAX_ATTITUDE_ANGLE)
                 cnt += 1
+                # Alternative if the common LSM method does not give a solution.
                 if cnt == num + 1:
-                    new_ug = new_ug.T[0]
-                    new_ub = new_ub.T[0]
                     num = 1
                     break
         if num is 1:
@@ -220,7 +220,13 @@ class Matcher(object):
             r_angle = + ux * sd - uz * cd
             p_angle = + uy * cd
             y_angle = - uy * sd
+            # Choose the median values.
             attitude = np.asarray([r_angle, p_angle, y_angle])
+            attitude = np.min(attitude, axis=1).flatten()
+            flag = np.any(np.abs(attitude) > MAX_ATTITUDE_ANGLE)
+            if flag:
+                msg = "attitude angles outside range"
+                raise MatcherError(msg)
 
         # Store the attitude angles in the Scene target and return their values.
         self.target._spacecraft_attitude = attitude
