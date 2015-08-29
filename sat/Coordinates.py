@@ -1,3 +1,5 @@
+from __future__ import division
+from . constants.Coordinates import EARTH_ANGULAR_SPEED
 from . constants.Coordinates import EARTH_SEMIMAJOR_AXIS
 from . constants.Coordinates import EARTH_FLATTENING_FACTOR
 from . constants.Coordinates import GEODETIC_COORDINATES_TOLERANCE
@@ -10,8 +12,56 @@ class Coordinates(object):
         pass
 
     @classmethod
+    def calc_greenwich_mean_sidereal_time(cls, datetime):
+        """Compute Greenwich mean sidereal time."""
+
+        # Call necessary constants.
+        we = EARTH_ANGULAR_SPEED
+        t1 = np.datetime64("2000-01-01T12:00:00Z")
+        t2 = np.datetime64("2000-01-01T00:00:00Z")
+        # Compute Julian centuries since epoch 2000/01/01 12:00:00.
+        dtm1 = ((datetime - t1) / np.timedelta64(1, "D")).astype(float)
+        dtm1 = dtm1[:, None] / 36525
+        # Compute UTC time for the datetime of interest.
+        dtm2 = ((datetime - t2) / np.timedelta64(1, "D")).astype(float)
+        dtm2 = ((dtm2 % dtm2.astype(int)) * 86400)[:, None]
+        # Compute the Greenwich Sidereal Time (GST), that is, the angle
+        # between the vernal point and the Greenwich meridian (which is
+        # also the angle between the ECI and ECEF reference systems).
+        c0, c1, c2, c3 = [24110.54841, 8640184.812866, 0.093104, -6.2e-6]
+        gst0 = c0 + c1 * dtm1 + c2 * dtm1**2 + c3 * dtm1**3
+        gst = (gst0/86400 * 2*np.pi) + we * dtm2 / 1.00278
+
+        return gst
+
+    @classmethod
+    def from_eci_to_ecf(cls, obj, datetime):
+        """Compute ECF coordinates from ECI coordinates.
+
+        Parameters:
+
+        obj
+            (n, 3) array containing (x_ecef, y_ecef, z_ecef) in meters
+        datetime
+            (n,) datetime64 array from numpy library
+        """
+
+        # Call necessary properties.
+        rx, ry, rz = [x[:, None] for x in obj.T]
+        # Compute the Greenwich Sidereal Time (GST), that is, the angle
+        # between the vernal point and the Greenwich meridian (which is
+        # also the angle between the ECI and ECF reference systems).
+        gst = Coordinates.calc_greenwich_mean_sidereal_time(datetime)
+        # Compute ECF coordinates as a rotation of ECI coordinates.
+        rx_s = + np.cos(gst)*rx + np.sin(gst)*ry
+        ry_s = - np.sin(gst)*rx + np.cos(gst)*ry
+        rz_s = rz
+
+        return np.hstack([rx_s, ry_s, rz_s])
+
+    @classmethod
     def from_ecf_to_geo(cls, obj):
-        """Compute geodetic coordinates for a specific datetime.
+        """Compute geodetic coordinates from ECF coordinates.
 
         Parameters:
 
@@ -63,12 +113,18 @@ class Coordinates(object):
         alt = alt_old
         lat = lat_old
         lon = _estimate_longitude()
-        # Set geodetic satellite position property.
+
         return np.hstack([lat, lon, alt])
 
     @classmethod
     def from_geo_to_ecf(cls, obj):
-        """Compute ECF coordinates using geodetic coordinates."""
+        """Compute ECF coordinates from geodetic coordinates.
+
+        Parameters:
+
+        obj
+            (n, 3) array containing (x_ecef, y_ecef, z_ecef) in meters
+        """
 
         # Call necessary constants.
         ae = EARTH_SEMIMAJOR_AXIS
@@ -76,10 +132,10 @@ class Coordinates(object):
         # Call necessary properties.
         lat, lon, alt = [x[:, None] for x in obj.T]
 
-        # Compute ECF coordinates.
+        # Compute ECF coordinates fro GEO coordinates.
         n = ae / np.sqrt(1 - e2 * np.sin(lat)**2)
         rx_s = (n + alt) * np.cos(lat) * np.cos(lon)
         ry_s = (n + alt) * np.cos(lat) * np.sin(lon)
         rz_s = (n * (1 - e2) + alt) * np.sin(lat)
-        # Set ECF satellite position property
+
         return np.hstack([rx_s, ry_s, rz_s])

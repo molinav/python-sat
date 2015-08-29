@@ -1,15 +1,13 @@
 from __future__ import division
 from . constants.Angle import REV2RAD
-from . constants.Coordinates import EARTH_FLATTENING_FACTOR
-from . constants.Coordinates import EARTH_SEMIMAJOR_AXIS
-from . constants.Coordinates import GEODETIC_COORDINATES_TOLERANCE
+from . constants.Coordinates import EARTH_ANGULAR_SPEED
 from . constants.Orbit import DAY2SEC
-from . constants.Orbit import EARTH_ANGULAR_SPEED
 from . constants.Orbit import ECCENTRIC_ANOMALY_TOLERANCE
 from . constants.Orbit import SECOND_ZONAL_TERM_J2
 from . constants.Orbit import STANDARD_GRAVITATIONAL_PARAMETER
 from . decorators import accepts
 from . decorators import returns
+from . Coordinates import Coordinates
 from . Ephemeris import Ephemeris
 from . Error import OrbitError
 import numpy as np
@@ -198,29 +196,6 @@ class Orbit(object):
         obj._longitude_of_the_ascending_node = o0 + o1 * dt
 
     @classmethod
-    def _calc_greenwich_mean_sidereal_time(cls, obj):
-        """Compute Greenwich mean sidereal time for an Orbit instance."""
-
-        # Call necessary constants.
-        we = EARTH_ANGULAR_SPEED
-        t1 = np.datetime64("2000-01-01T12:00:00Z")
-        t2 = np.datetime64("2000-01-01T00:00:00Z")
-        # Compute Julian centuries since epoch 2000/01/01 12:00:00.
-        dtm1 = ((obj.datetime - t1) / np.timedelta64(1, "D")).astype(float)
-        dtm1 = dtm1[:, None] / 36525
-        # Compute UTC time for the datetime of interest.
-        dtm2 = ((obj.datetime - t2) / np.timedelta64(1, "D")).astype(float)
-        dtm2 = ((dtm2 % dtm2.astype(int)) * 86400)[:, None]
-        # Compute the Greenwich Sidereal Time (GST), that is, the angle
-        # between the vernal point and the Greenwich meridian (which is
-        # also the angle between the ECI and ECEF reference systems).
-        c0, c1, c2, c3 = [24110.54841, 8640184.812866, 0.093104, -6.2e-6]
-        gst0 = c0 + c1 * dtm1 + c2 * dtm1**2 + c3 * dtm1**3
-        gst = (gst0/86400 * 2*np.pi) + we * dtm2 / 1.00278
-
-        return gst
-
-    @classmethod
     def _calc_coordinates_from_orb_to_eci(cls, obj):
         """Compute ECI coordinates for a specific datetime."""
 
@@ -256,95 +231,25 @@ class Orbit(object):
     def _calc_coordinates_from_eci_to_ecf(cls, obj):
         """Compute ECF coordinates for a specific datetime."""
 
-        # Call necessary properties.
         rx, ry, rz = [x[:, None] for x in obj.position_eci.T]
         vx, vy, vz = [x[:, None] for x in obj.velocity_eci.T]
-        # Compute the Greenwich Sidereal Time (GST), that is, the angle
-        # between the vernal point and the Greenwich meridian (which is
-        # also the angle between the ECI and ECF reference systems).
-        gst = cls._calc_greenwich_mean_sidereal_time(obj)
-        # Compute ECF coordinates as a rotation of ECI coordinates.
-        rx_s = + np.cos(gst)*rx + np.sin(gst)*ry
-        ry_s = - np.sin(gst)*rx + np.cos(gst)*ry
-        rz_s = rz
-        # Compute (Vx,Vy,Vz) velocities in ECF reference system.
-        vx += EARTH_ANGULAR_SPEED*ry
-        vy -= EARTH_ANGULAR_SPEED*rx
-        vx_s = + np.cos(gst)*vx + np.sin(gst)*vy
-        vy_s = - np.sin(gst)*vx + np.cos(gst)*vy
-        vz_s = vz
-        # Set ECF satellite position and velocity properties.
-        obj._position_ecf = np.hstack([rx_s, ry_s, rz_s])
-        obj._velocity_ecf = np.hstack([vx_s, vy_s, vz_s])
+        vx += EARTH_ANGULAR_SPEED * ry
+        vy -= EARTH_ANGULAR_SPEED * rx
+
+        obj._position_ecf = Coordinates.from_eci_to_ecf(
+            np.hstack([rx, ry, rz]), obj.datetime)
+        obj._velocity_ecf = Coordinates.from_eci_to_ecf(
+            np.hstack([vx, vy, vz]), obj.datetime)
 
     @classmethod
     def _calc_coordinates_from_ecf_to_geo(cls, obj):
         """Compute geodetic coordinates for a specific datetime."""
-
-        # Call necessary constants.
-        ae = EARTH_SEMIMAJOR_AXIS
-        e2 = EARTH_FLATTENING_FACTOR
-        # Call necessary properties.
-        rx_s, ry_s, rz_s = [x[:, None] for x in obj.position_ecf.T]
-        p_factor = np.sqrt(rx_s**2 + ry_s**2)
-
-        def _estimate_n_factor(latitude):
-            return ae / np.sqrt(1 - e2 * np.sin(latitude)**2)
-
-        def _estimate_height(n_factor, latitude):
-            return p_factor / np.cos(latitude) - n_factor
-
-        def _estimate_latitude(n_factor, altitude):
-            sin_lat = rz_s / (n_factor*(1-e2) + altitude)
-            return np.arctan((rz_s + e2*n_factor*sin_lat)/p_factor)
-
-        def _estimate_longitude():
-            return np.arctan2(ry_s, rx_s)
-
-        # Estimate recursively the values of altitude and latitude.
-        n_factor_old = ae
-        alt_old = 0
-        lat_old = _estimate_latitude(n_factor_old, alt_old)
-        dif = np.asarray([1])
-        # Repeat recursive method until a tolerance is reached.
-        while (dif > 0).all():
-            n_factor_new = np.where(
-                dif > 0, _estimate_n_factor(lat_old), n_factor_old)
-            alt_new = np.where(
-                dif > 0, _estimate_height(n_factor_new, lat_old), alt_old)
-            lat_new = np.where(
-                dif > 0, _estimate_latitude(n_factor_new, alt_new), lat_old)
-            dif1 = np.abs(alt_new - alt_old)
-            dif2 = np.abs(lat_new - lat_old)
-            dif = dif1 + dif2 - GEODETIC_COORDINATES_TOLERANCE
-            # Overwrite old temporary variables with new values.
-            n_factor_old = n_factor_new
-            alt_old = alt_new
-            lat_old = lat_new
-        # Compute longitude for a specific time.
-        alt = alt_old
-        lat = lat_old
-        lon = _estimate_longitude()
-        # Set geodetic satellite position property.
-        obj._position_geo = np.hstack([lat, lon, alt])
+        obj._position_geo = Coordinates.from_ecf_to_geo(obj.position_ecf)
 
     @classmethod
     def _calc_coordinates_from_geo_to_ecf(cls, obj):
         """Compute ECF coordinates using geodetic coordinates."""
-
-        # Call necessary constants.
-        ae = EARTH_SEMIMAJOR_AXIS
-        e2 = EARTH_FLATTENING_FACTOR
-        # Call necessary properties.
-        lat, lon, alt = [x[:, None] for x in obj.position_geo.T]
-
-        # Compute ECF coordinates.
-        n = ae / np.sqrt(1 - e2 * np.sin(lat)**2)
-        rx_s = (n + alt) * np.cos(lat) * np.cos(lon)
-        ry_s = (n + alt) * np.cos(lat) * np.sin(lon)
-        rz_s = (n * (1 - e2) + alt) * np.sin(lat)
-        # Set ECF satellite position property
-        obj._position_ecf = np.hstack([rx_s, ry_s, rz_s])
+        obj._position_ecf = Coordinates.from_geo_to_ecf(obj.position_geo)
 
     @property
     @returns(np.ndarray)

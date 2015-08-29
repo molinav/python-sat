@@ -9,10 +9,6 @@ DAY2SEC =\
 ECCENTRIC_ANOMALY_TOLERANCE =\
     1e-9
 
-# Earth's angular speed in radians per second.
-EARTH_ANGULAR_SPEED =\
-    7.2921150e-5
-
 # Coefficient for the second zonal term, related to the oblateness of the
 # Earth, expressed in m^5 per s^2.
 SECOND_ZONAL_TERM_J2 =\
