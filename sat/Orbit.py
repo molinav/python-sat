@@ -82,8 +82,7 @@ class Orbit(object):
         try:
             obj._datetime = np.asarray([
                 x.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                for x in date.ravel()
-                ]).astype("datetime64")
+                for x in date.ravel()], dtype="datetime64")[:, None]
         except (TypeError, ValueError):
             msg = "Invalid array for input time"
             err = OrbitError(msg)
@@ -99,7 +98,7 @@ class Orbit(object):
             epoch = np.asarray([
                 obj.ephemeris.epoch_datetime.strftime(fmt)
                 ]).astype("datetime64")
-            delta = (obj.datetime - epoch)[:, None]
+            delta = (obj.datetime - epoch)
             obj._timedelta = (delta / np.timedelta64(1, "D")).astype(float)
         except TypeError:
             msg = "Ephemeris attribute from Orbit instance is not complete"
