@@ -24,6 +24,10 @@ class FilepathError(SatError):
     pass
 
 
+class MatcherError(SatError):
+    pass
+
+
 class OrbitError(SatError):
     pass
 
