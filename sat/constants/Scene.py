@@ -17,7 +17,7 @@ DATE_PATTERN = text_type(
 
 # Default scan step angle for AVHRR sensor in degrees.
 DEFAULT_SCAN_STEP_LOOK_ANGLE =\
-    0.053825
+    0.0539
 
 # Margin value when obtaining the border mask of a gridded indices array.
 HPRT_BORDER_MASK_MARGIN =\

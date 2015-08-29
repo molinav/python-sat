@@ -1,9 +1,8 @@
 from __future__ import division
 from __future__ import print_function
 from . constants.Angle import DEG2RAD
-from . constants.Orbit import EARTH_FLATTENING_FACTOR
-from . constants.Orbit import EARTH_SEMIMAJOR_AXIS
-from . constants.Orbit import GEODETIC_COORDINATES_TOLERANCE
+from . constants.Coordinates import EARTH_FLATTENING_FACTOR
+from . constants.Coordinates import EARTH_SEMIMAJOR_AXIS
 from . constants.Scene import DATASET_COORDINATE_TOLERANCE
 from . constants.Scene import DATASET_DRIVER
 from . constants.Scene import DATE_PATTERN
@@ -17,6 +16,7 @@ from . constants.Scene import SPACECRAFT_DESCENDING
 from . decorators import accepts
 from . decorators import returns
 from . Angle import Angle
+from . Coordinates import Coordinates
 from . Ephemeris import Ephemeris
 from . Error import SceneError
 from . Orbit import Orbit
@@ -27,6 +27,7 @@ from scipy.interpolate import NearestNDInterpolator
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import binary_dilation
 from scipy.ndimage import binary_erosion
+from scipy.ndimage import distance_transform_edt
 from scipy.sparse import coo_matrix
 from six import text_type
 import gdal
@@ -174,7 +175,8 @@ class Scene(object):
                 pix_vec_ii = d_norm * u_xyz + r_vec_ii
                 # Update image position coordinates.
                 self._gcp_position_ecf = pix_vec_ii.T
-                self._calc_coordinates_from_ecf_to_geo()
+                self._gcp_position_geo = Coordinates.from_ecf_to_geo(
+                    self.gcp_position_ecf)
                 # Compute new norm for pixel vectors.
                 lat = self.gcp_position_geo[:, 0]
                 pix_norm2 = np.sqrt(
@@ -269,16 +271,19 @@ class Scene(object):
             prj_nw = np.asarray([raw_ymax, raw_xmin]) - 0.5 * prj_st
             prj_se = np.asarray([raw_ymin, raw_xmax]) + 0.5 * prj_st
             prj_sz = np.round((prj_se - prj_nw) / prj_st).astype(int)
+
+            # Set geotransform property.
             self._hrpt_gtr = (prj_nw[1], prj_st[1], 0, prj_nw[0], 0, prj_st[0])
+
             # Compute pixel indices in the new grid.
             prj_st3 = prj_st[:, None, None]
             prj_nw3 = prj_nw[:, None, None]
-            prj_rowcol = (self.hrpt_geo[:2]/DEG2RAD - prj_nw3) // prj_st3
+            prj_rc = (self.hrpt_geo[:2]/DEG2RAD - prj_nw3) // prj_st3
 
-            return prj_sz, prj_rowcol
+            return prj_sz, prj_rc
 
         # Compute geotransform for the new grid.
-        prj_sz, prj_rowcol = calc_hrpt_gtr()
+        prj_size, prj_rowcol = calc_hrpt_gtr()
 
         # Show info message.
         msg = "\n  Calculating gridded HRPT border mask"
@@ -289,16 +294,17 @@ class Scene(object):
 
             margin = HPRT_BORDER_MASK_MARGIN
             iter_n = int(margin//2)
-            msk_sz = prj_sz + 2 * margin
+            msk_sz = prj_size + 2 * margin
             msk_rowcol = prj_rowcol + margin
             row, col = msk_rowcol.reshape((2, np.prod(msk_rowcol.shape[1:])))
             # Arrange test array.
-            test = coo_matrix((row+1, (row, col)), shape=msk_sz).todense()
+            ones = np.ones(row.shape)
+            test = coo_matrix((ones, (row, col)), shape=msk_sz).toarray()
             test = test > 0
             kern = np.ones((3, 3), dtype=bool)
             # Dilate and erode test array to fill holes.
             test = binary_dilation(test, structure=kern, iterations=iter_n)
-            test = binary_erosion(test, structure=kern, iterations=iter_n+2)
+            test = binary_erosion(test, structure=kern, iterations=iter_n+5)
             return np.logical_not(test[None, margin:-margin, margin:-margin])
 
         # Set pixels within border mask to fill value.
@@ -313,11 +319,12 @@ class Scene(object):
 
             # Compute intermediate arrays.
             sz = (-1, 2)
-            tp = np.int16
-            raw_rowcol = np.asarray(np.meshgrid(xstep, ystep)[::-1])
-            qry_rowcol = np.mgrid[:prj_sz[0], :prj_sz[1]]
+            tp = np.float32
+            raw_rc = np.mgrid[:self.scan_ysize, :self.scan_xsize] + 0.5
+            qry_rc = np.mgrid[:prj_size[0], :prj_size[1]] + 0.5
+
             # Compute outputs.
-            rc = [prj_rowcol, raw_rowcol, qry_rowcol]
+            rc = [prj_rowcol, raw_rc, qry_rc]
             return [np.rollaxis(x, 0, 3).reshape(sz).astype(tp) for x in rc]
 
         # Set pixels from gridded image as xx and pixels from hrpt as yy. Set
@@ -328,68 +335,90 @@ class Scene(object):
             """Legacy inner function where self._hrpt_pix is computed."""
 
             func = NearestNDInterpolator(xx, yy)
-            temp = func(vv).reshape((prj_sz[0], prj_sz[1], 2))
+            temp = func(vv).reshape((prj_size[0], prj_size[1], 2))
             self._hrpt_pix = np.rollaxis(temp, 2)
             self._hrpt_pix[border_mask] = fill_value
 
         def calc_hrpt_pix_legacy2():
-            """Inner function where self._hrpt_pix is computed."""
+            """Legacy inner function where self._hrpt_pix is computed."""
 
             # Prepare info message for loop.
-            nfmt = len(str(prj_sz[0]))
+            nfmt = len(str(prj_size[0]))
             msg2 = "\n    rows {1:{0}d} - {2:{0}d} out of {3}"
 
             # For every slice project the pixel indices.
-            temp = np.empty((2, prj_sz[0], prj_sz[1]), dtype=np.int16)
+            temp = np.empty((2, prj_size[0], prj_size[1]), dtype=np.int16)
 
-            for lim1 in range(0, prj_sz[0], slices):
+            for lim1 in range(0, prj_size[0], slices):
 
-                lim2 = min(lim1 + slices, prj_sz[0])
+                lim2 = min(prj_size[0], lim1 + slices)
 
                 # Show info message.
-                print(msg2.format(nfmt, lim1, lim2, prj_sz[0]))
+                print(msg2.format(nfmt, lim1, lim2, prj_size[0]))
 
                 # Get array slices for the current loop.
                 flag = (xx[:, 0] > lim1-buffer) & (xx[:, 0] < lim2+buffer)
                 xx_n = xx[flag]
                 yy_n = yy[flag]
-                vv_n = vv[lim1*prj_sz[1]:lim2*prj_sz[1]]
+                vv_n = vv[lim1*prj_size[1]:lim2*prj_size[1]]
 
                 # Convert to gridded data.
-                size = (lim2-lim1, prj_sz[1], 2)
+                size = (lim2-lim1, prj_size[1], 2)
                 temp[:, lim1:lim2] = np.rollaxis(
                     griddata(xx_n, yy_n, vv_n, method="nearest",
                              fill_value=fill_value,).reshape(size), 2)
+
+            # Set array into self._hrpt_pix and mask border values.
             self._hrpt_pix = temp
             self._hrpt_pix[border_mask] = fill_value
 
         def calc_hrpt_pix():
-
-            from scipy import ndimage as nd
+            """Inner function where self._hrpt_pix is computed."""
 
             # Arrange test array.
             row, col = xx.T
             ones_array = np.ones((yy.shape[0],), dtype=int)
             test_array = np.asarray([
-                coo_matrix((val, (row, col)), shape=prj_sz).toarray()
+                coo_matrix((val, (row, col)), shape=prj_size).toarray()
                 for val in [yy[:, 0], yy[:, 1], ones_array]])
 
             # Divide array of indices by the array of weights.
-            mass = np.where(test_array[2], test_array[2], 1)
+            nums = test_array[None, 2]
+            mass = np.where(nums, nums, 1)
             data = (test_array[:2] // mass).astype(np.int16)
 
-            # Do mask computation.
-            mask = (data == 0)
-            data -= 1
-            data[mask] = -100
-            data[:, border_mask[0]] = -999
+            # Build necessary masks.
+            nodata_mask = np.equal(nums, 0)
+            values_mask = np.logical_not(border_mask)
+            distance_mask = np.repeat(nodata_mask, 2, axis=0) & values_mask
 
-            # Store array of indices in self._hrpt_pix.
-            indices = nd.distance_transform_edt(
-                mask & np.logical_not(border_mask),
-                return_distances=False,
-                return_indices=True)
-            self._hrpt_pix = data[tuple(indices)]
+            # Prepare info message for loop.
+            nfmt = len(str(prj_size[0]))
+            msg2 = "\n    rows {1:{0}d} - {2:{0}d} out of {3}"
+
+            n = data.shape[1]
+            temp = np.empty(data.shape, dtype=np.int16)
+
+            for lim1 in range(0, n, slices):
+
+                lim2 = min(n, lim1 + slices)
+                lim1_b = max(0, lim1 - buffer)
+                lim2_b = min(n, lim2 + buffer)
+
+                # Show info message.
+                print(msg2.format(nfmt, lim1, lim2, data.shape[1]))
+
+                # Store array of indices in a temporary array.
+                indices = distance_transform_edt(
+                    distance_mask[:, lim1_b:lim2_b, :],
+                    return_distances=False,
+                    return_indices=True)
+                temp_b = data[:, lim1_b:lim2_b, :][tuple(indices)]
+                temp[:, lim1:lim2, :] = temp_b[:, lim1-lim1_b:lim2-lim1_b, :]
+
+            # Store temporary array of indices in self._hrpt_pix.
+            self._hrpt_pix = temp
+            self._hrpt_pix[:, border_mask[0]] = fill_value
 
         # Calculate HRPT indices image.
         calc_hrpt_pix()
@@ -407,28 +436,32 @@ class Scene(object):
                     0, 0, self.scan_xsize, self.scan_ysize)[None, :]
                 for i in range(self.dataset.RasterCount)])
 
+            # Generate the array of absolute indices that connect the final
+            # geodetic dataset with the original raw dataset.
+            index = self.hrpt_pix.astype(int)
+            index = index[0] * bnd_raw.shape[2] + index[1]
+            bnd_raw = bnd_raw.reshape((bnd_raw.shape[0], -1))
+
             # Assign digital-numbers using the indices array.
-            idx = self.hrpt_pix
-            bnd_geo = np.zeros((len(bnd_raw),) + idx.shape[1:], dtype=np.int16)
-            for i in range(idx.shape[1]):
-                for j in range(idx.shape[2]):
-                    row, col = idx[:, i, j]
-                    if row != fill_value and col != fill_value:
-                        bnd_geo[:, i, j] = bnd_raw[:, row, col]
+            bnd_geo_shape = (bnd_raw.shape[0],) + index.shape
+            bnd_geo = bnd_raw.take(index.ravel(), axis=1, mode="warp")
+            bnd_geo = bnd_geo.reshape(bnd_geo_shape).astype(np.int16)
+            bnd_geo[:, border_mask[0]] = 0
+
             self._hrpt_img = bnd_geo
 
         # Calculate HRPT 5-band digital-number image.
         calc_hrpt_img()
 
         # Show info message.
-        msg = "\n  Calculating gridded HRPT masks"
+        msg = "\n  Calculating gridded HRPT cloud masks"
         print(msg)
 
         def calc_hrpt_msk():
             """Inner function where self._hrpt_msk is computed"""
 
             # Set thermal evaluator (channel 5).
-            cld = self.hrpt_img[4] >= HRPT_CLOUD_THRESHOLD_B5
+            cld = self.hrpt_img[4] > HRPT_CLOUD_THRESHOLD_B5
 
             self._hrpt_msk = 255 * cld[None, :].astype(np.uint8)
 
@@ -436,58 +469,8 @@ class Scene(object):
         calc_hrpt_msk()
 
         # Show info message.
-        msg = "\n  HRPT indices were successfully gridded with shape {}"
-        print(msg.format(self.hrpt_pix.shape))
-
-    def _calc_coordinates_from_ecf_to_geo(self):
-        """Compute geodetic coordinates for a specific datetime."""
-
-        # Call necessary constants.
-        ae = EARTH_SEMIMAJOR_AXIS
-        e2 = EARTH_FLATTENING_FACTOR
-        # Call necessary properties.
-        rx_s, ry_s, rz_s = [x[:, None] for x in self.gcp_position_ecf.T]
-        p_factor = np.sqrt(rx_s**2 + ry_s**2)
-
-        def _estimate_n_factor(latitude):
-            return ae / np.sqrt(1 - e2 * np.sin(latitude)**2)
-
-        def _estimate_height(n_factor, latitude):
-            return p_factor / np.cos(latitude) - n_factor
-
-        def _estimate_latitude(n_factor, altitude):
-            sin_lat = rz_s / (n_factor*(1-e2) + altitude)
-            return np.arctan((rz_s + e2*n_factor*sin_lat)/p_factor)
-
-        def _estimate_longitude():
-            return np.arctan2(ry_s, rx_s)
-
-        # Estimate recursively the values of altitude and latitude.
-        n_factor_old = ae
-        alt_old = 0
-        lat_old = _estimate_latitude(n_factor_old, alt_old)
-        dif = np.asarray([1])
-        # Repeat recursive method until a tolerance is reached.
-        while (dif > 0).all():
-            n_factor_new = np.where(
-                dif > 0, _estimate_n_factor(lat_old), n_factor_old)
-            alt_new = np.where(
-                dif > 0, _estimate_height(n_factor_new, lat_old), alt_old)
-            lat_new = np.where(
-                dif > 0, _estimate_latitude(n_factor_new, alt_new), lat_old)
-            dif1 = np.abs(alt_new - alt_old)
-            dif2 = np.abs(lat_new - lat_old)
-            dif = dif1 + dif2 - GEODETIC_COORDINATES_TOLERANCE
-            # Overwrite old temporary variables with new values.
-            n_factor_old = n_factor_new
-            alt_old = alt_new
-            lat_old = lat_new
-        # Compute longitude for a specific time.
-        alt = alt_old
-        lat = lat_old
-        lon = _estimate_longitude()
-        # Set geodetic satellite position property.
-        self._gcp_position_geo = np.hstack([lat, lon, alt])
+        msg = "\n  HRPT channels were successfully gridded with shape {}"
+        print(msg.format(self.hrpt_img.shape))
 
     def _compute_spacecraft_fixed_unit_look_vectors(self):
         """Return unit look vectors in spacecraft-fixed coordinates."""
